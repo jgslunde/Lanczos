@@ -69,7 +69,7 @@ def test_is_orthogonal(V, tol=0.01, no_assert=False):
 
 
 def test_Heff_and_V(H, H_eff, V, no_assert=False):
-    """ Tests """
+    """ Woopwoop: OUT OF ORDER. CHeck later. """
     N = np.shape(H)[0]
     error = np.zeros(N)
     error[0] = np.sum(np.abs(np.dot(H, V[:,0]) - (H_eff[0,0]*V[:,0] + H_eff[0,1]*V[:,1])))
@@ -135,39 +135,26 @@ def LANCZOS(H, n):
     v0 = np.random.uniform(-1, 1, size=(N))
     v0 = v0/np.linalg.norm(v0)
 
-    
-    V = np.zeros((N, n))  # Matrix of the n generated orthogonal v-vectors.
-    V[:,0] = v0
-    w_ = np.zeros((n, N));    w = np.zeros((n, N))
-    alpha = np.zeros(n);    beta = np.zeros(n-1)
 
-    w_[0] = np.dot(H, V[:,0])
-    alpha[0] = np.dot(w_[0], V[:,0])
-    w[0] = w_[0] - alpha[0]*V[:,0]
-    for j in range(1, n):
-        beta[j-1] = np.linalg.norm(w[j-1])
-        V[:,j] = w[j-1]/beta[j-1]
-        w_[j] = np.dot(H, V[:,j])
-        alpha[j] = np.dot(w_[j], V[:,j])
-        w[j] = w_[j] - alpha[j]*V[:,j] - beta[j-1]*V[:,j-1]
-
-    """
     # Lanczos Algorithm
     V = np.zeros((N, n))  # Matrix of the n generated orthogonal v-vectors.
+    V[:,0] = v0
     alpha = np.zeros(n)
     beta = np.zeros(n-1)
-    r = v0.copy()
-    V[:,-1] = v0
-    # Creating H_eff
+    r = np.dot(H, V[:,0])
+    alpha[0] = np.dot(r, V[:,0])
+    r = r - alpha[0]*V[:,0]
+
     for j in range(0, n):
         beta[j-1] = np.linalg.norm(r)
-
         V[:,j] = r/beta[j-1]
         r = np.dot(H, V[:,j])
-        r = r - V[:,j-1]*beta[j-1]
+        # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: CHECK WTF
         alpha[j] = np.dot(V[:,j], r)
-        r = r - V[:,j]*alpha[j]
-    """
+        r = r - V[:,j]*alpha[j] - V[:,j-1]*beta[j-1]
+
+
+    # Creating H_eff
     H_eff = np.zeros((n, n))
     H_eff[0,0] = alpha[0]
     H_eff[0,1] = beta[0]
@@ -181,8 +168,8 @@ def LANCZOS(H, n):
     return H_eff, V
 
 
-N = 10
-n = 10
+N = 1000
+n = 100
 
 
 # Generating random Hermitian (symetric) matrix.
@@ -213,14 +200,5 @@ for i in range(n):
 test_is_normalized(H_eigvecs_lanczos, tol=0.001)
 print("\nH_eigvect_lanczos Orthogonality: ", test_is_orthogonal(H_eigvecs_lanczos, no_assert=True))
 
-for i in range(n):
-    eig_vec = H_eigvecs_lanczos[:,i]
-    idx = (np.linalg.norm(H_eigvecs_actual - eig_vec, axis=1)).argmin()
-    print("Estimated Eigenvalue %.2f is closest (in eigvec) to actual eigenvalue %.2f" %\
-            (H_eff_eigvals[i], H_eigvals_actual[idx]))
-    print_2vec(eig_vec, H_eigvecs_actual[idx], N)
 
-compare_eigvals(H_eigvals_actual, H_eff_eigvals, H_eigvecs_actual, H_eigvecs_lanczos)
-
-test_Heff_and_V(H, H_eff, V)
-
+# compare_eigvals(H_eigvals_actual, H_eff_eigvals, H_eigvecs_actual, H_eigvecs_lanczos)
