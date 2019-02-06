@@ -27,14 +27,13 @@ class Lanczos:
     @property
     def H_eigvecs(self):
         if not self.H_eigs_have_been_found:
-            raise ValueError("H eig conversion has not been called.")
-        else:
-            return self._H_eigvecs
+            self.get_H_eigs()
+        return self._H_eigvecs
 
     @property
     def H_eigvals(self):
         if not self.H_eigs_have_been_found:
-            raise ValueError("H eig conversion has not been called.")
+            self.get_H_eigs()
         else:
             return self._H_eigvals
 
