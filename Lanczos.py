@@ -1,4 +1,5 @@
 import numpy as np
+import cupy as cp
 from tqdm import tqdm
 
 class Lanczos:
@@ -58,7 +59,7 @@ class Lanczos:
         N, n = self.N, self.n
         V = self.V
         # Finding H_eff eigenvectors and eigenvalues:
-        H_eff_eigvals, H_eff_eigvecs = self.get_sorted_eigs(self.H_eff)
+        H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)#self.get_sorted_eigs(self.H_eff)
         #test_is_normalized(H_eff_eigvecs, tol=0.001)
         #print("\nH_eff_eigvecs Orthogonality: ", test_is_orthogonal(H_eff_eigvecs, no_assert=True))
 
@@ -75,6 +76,8 @@ class Lanczos:
 
 
     def get_sorted_eigs(self, A):
+        #import time
+        #t0 = time.clock()
         """
         INPUT:  A = (N,N) matrix.
     
@@ -83,7 +86,11 @@ class Lanczos:
                         eigvecs[:,i] corresponds to eigvals[i].
         """
         print("+++ Searching for exact eigenvectors and values with Numpy.")
-        eigvals, eigvecs = np.linalg.eig(A)
+        eigvals, eigvecs = cp.linalg.eigh(cp.array(A))
+        #eigvals, eigvecs = np.linalg.eigh(A)
+        #print(time.clock()-t0)
+        eigvals = cp.asnumpy(eigvals)
+        eigvecs = cp.asnumpy(eigvecs)
         idx = eigvals.argsort()[::-1]
         eigvals = eigvals[idx]
         eigvecs = eigvecs[:,idx]
@@ -94,7 +101,7 @@ class Lanczos:
     def compare_eigs(self):
         """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors.
         """
-        eigval_actual, eigvec_actual = TEST.get_sorted_eigs(H)
+        eigval_actual, eigvec_actual = np.linalg.eigh(self.H)#self.get_sorted_eigs(self.H)
         eigval_estimate, eigvec_estimate = self.H_eigvals, self.H_eigvecs
 
         N, n = self.N, self.n
@@ -118,7 +125,7 @@ class Lanczos:
 
     def test_is_Hermitian(self, A):
         """Tests if A is Hermitian."""
-        assert (np.matrix(H) == np.matrix(H).H).all(),\
+        assert (np.matrix(A) == np.matrix(A).A).all(),\
         "A IS NOT HERMITIAN!"
 
 
@@ -175,8 +182,8 @@ class Lanczos:
 if __name__ == "__main__":
     import numpy as np
 
-    N = 20
-    n = 20
+    N = 100
+    n = 100
 
     # Generating random Hermitian (symetric) matrix.
     np.random.seed(99)
@@ -187,5 +194,5 @@ if __name__ == "__main__":
     TEST.execute_Lanczos(n)
     TEST.get_H_eigs()
 
-    H_eigvals_actual, H_eigvecs_actual = TEST.get_sorted_eigs(H)
+    H_eigvals_actual, H_eigvecs_actual = np.linalg.eigh(H)#TEST.get_sorted_eigs(H)
     TEST.compare_eigs()
