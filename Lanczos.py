@@ -7,10 +7,37 @@ class Lanczos:
         self.test_is_Hermitian(H)
         self.H = H
         self.N = np.shape(H)[0]
-        self.H_eff = None
-        self.V = None
-        self.H_eigvals = None
-        self.H_eigvecs = None
+        self.Lanczos_has_been_executed = False
+        self.H_eigs_have_been_found = False
+
+    @property
+    def H_eff(self):
+        if not self.Lanczos_has_been_executed:
+            raise ValueError("Lanczos Algorithm has not been called.")
+        else:
+            return self._H_eff
+
+    @property
+    def V(self):
+        if not self.Lanczos_has_been_executed:
+            raise ValueError("Lanczos Algorithm has not been called.")
+        else:
+            return self._V
+
+    @property
+    def H_eigvecs(self):
+        if not self.H_eigs_have_been_found:
+            raise ValueError("H eig conversion has not been called.")
+        else:
+            return self._H_eigvecs
+
+    @property
+    def H_eigvals(self):
+        if not self.H_eigs_have_been_found:
+            raise ValueError("H eig conversion has not been called.")
+        else:
+            return self._H_eigvals
+
 
     def execute_Lanczos(self, n, seed=99):
         print("+++Executing Lanczos algorithm")
@@ -50,58 +77,33 @@ class Lanczos:
             H_eff[i,i] = alpha[i]
             H_eff[i,i+1] = beta[i]
 
-        self.H_eff, self.V = H_eff, V
+        self._H_eff, self._V = H_eff, V
         print("+++Lanczos executed successfully.")
+        self.Lanczos_has_been_executed = True
 
 
     def get_H_eigs(self):
         print("+++ Converting eigenvectors from H_eff to H basis.")
-        N, n = self.N, self.n
-        V = self.V
-        # Finding H_eff eigenvectors and eigenvalues:
-        H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)#self.get_sorted_eigs(self.H_eff)
-        #test_is_normalized(H_eff_eigvecs, tol=0.001)
-        #print("\nH_eff_eigvecs Orthogonality: ", test_is_orthogonal(H_eff_eigvecs, no_assert=True))
-
+        N, n, V = self.N, self.n, self.V
+        H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)
+        
         # Transforming H_eff eigvecs to H eigvecs:
         H_eigvecs_lanczos = np.zeros((N, n))
         for i in range(n):
             H_eigvecs_lanczos[:,i] = np.dot(V, H_eff_eigvecs[:,i])
-        #test_is_normalized(H_eigvecs_lanczos, tol=0.001)
-        #print("\nH_eigvect_lanczos Orthogonality: ", test_is_orthogonal(H_eigvecs_lanczos, no_assert=True))
+        self.test_is_normalized(H_eigvecs_lanczos, tol=0.001)
+        self.test_is_orthogonal(H_eigvecs_lanczos, tol=0.01)
         
-        self.H_eigvals = H_eff_eigvals
-        self.H_eigvecs = H_eigvecs_lanczos
+        self._H_eigvals = H_eff_eigvals
+        self._H_eigvecs = H_eigvecs_lanczos
         print("+++ Finished Converting.")
-
-
-    def get_sorted_eigs(self, A):
-        #import time
-        #t0 = time.clock()
-        """
-        INPUT:  A = (N,N) matrix.
-    
-        RETURN: eigvals = (N) array of sorted (high to low) eigenvalues of A.
-                eigvecs = (N,N) array of sorted eigenvalues, such that
-                        eigvecs[:,i] corresponds to eigvals[i].
-        """
-        print("+++ Searching for exact eigenvectors and values with Numpy.")
-        eigvals, eigvecs = cp.linalg.eigh(cp.array(A))
-        #eigvals, eigvecs = np.linalg.eigh(A)
-        #print(time.clock()-t0)
-        eigvals = cp.asnumpy(eigvals)
-        eigvecs = cp.asnumpy(eigvecs)
-        idx = eigvals.argsort()[::-1]
-        eigvals = eigvals[idx]
-        eigvecs = eigvecs[:,idx]
-        print("+++ All exact eigs found.")
-        return eigvals, eigvecs
+        self.H_eigs_have_been_found = True
 
     
     def compare_eigs(self):
         """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors.
         """
-        eigval_actual, eigvec_actual = np.linalg.eigh(self.H)#self.get_sorted_eigs(self.H)
+        eigval_actual, eigvec_actual = np.linalg.eigh(self.H)
         eigval_estimate, eigvec_estimate = self.H_eigvals, self.H_eigvecs
 
         N, n = self.N, self.n
@@ -123,13 +125,15 @@ class Lanczos:
             print("%12.2f %12.2f %12.4f %12.4f" % (eigval_pairs[i,0], eigval_pairs[i,1], abs((eigval_pairs[i,0] - eigval_pairs[i,1])/eigval_pairs[i,0]*100), eigvec_innerprod[i]))
 
 
-    def test_is_Hermitian(self, A):
+    @staticmethod
+    def test_is_Hermitian(A):
         """Tests if A is Hermitian."""
         assert (np.matrix(A) == np.matrix(A).A).all(),\
         "A IS NOT HERMITIAN!"
 
 
-    def test_is_normalized(self, V, tol=0.001, no_assert=False):
+    @staticmethod
+    def test_is_normalized(V, tol=0.001, no_assert=False):
         """ INPUT: V = (M,m) matrix. Tests that it's columns V[:,i] are normal.
             no_assert = Setting this to True will NOT run a test, and instead
                                 return the inner product of the least normal vector.
@@ -146,7 +150,8 @@ class Lanczos:
             "VECTOR HAS NORM %.4f. IS NOT NORMALIZED." % least_normalized
 
 
-    def test_is_orthogonal(self, V, tol=0.01, no_assert=False):
+    @staticmethod
+    def test_is_orthogonal(V, tol=0.01, no_assert=False):
         """ INPUT: V = (M,m) matrix. Tests whether the column vectors of V[:,i] are all orthogonal.
             no_assert = Setting this to True will NOT run a test, and instead
                                 return the largest inner product between two vectors.
@@ -163,7 +168,8 @@ class Lanczos:
             (max_error_idx[0], max_error_idx[1], max_error)
 
 
-    def test_is_eigvecs(self, A, V, tol=0.01, no_assert=False):
+    @staticmethod
+    def test_is_eigvecs(A, V, tol=0.01, no_assert=False):
         """ Tests that the columns of V (V[:,i]) are eigenvectors of a matrix H."""
         N = np.shape(A)[0]
         errors = np.zeros(N)
@@ -176,14 +182,11 @@ class Lanczos:
             assert np.max(errors) > tol, "VECTOR NOT EIGENVECTOR."
 
 
-
-
-
 if __name__ == "__main__":
     import numpy as np
 
-    N = 100
-    n = 100
+    N = 20
+    n = 20
 
     # Generating random Hermitian (symetric) matrix.
     np.random.seed(99)
@@ -194,5 +197,5 @@ if __name__ == "__main__":
     TEST.execute_Lanczos(n)
     TEST.get_H_eigs()
 
-    H_eigvals_actual, H_eigvecs_actual = np.linalg.eigh(H)#TEST.get_sorted_eigs(H)
+    H_eigvals_actual, H_eigvecs_actual = np.linalg.eigh(H)
     TEST.compare_eigs()
