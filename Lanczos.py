@@ -1,5 +1,5 @@
 import numpy as np
-import cupy as cp
+#import cupy as cp
 from tqdm import tqdm
 
 class Lanczos:
@@ -39,6 +39,9 @@ class Lanczos:
 
 
     def execute_Lanczos(self, n, seed=99):
+        if n > self.N:
+            raise ValueError("n cannot be larger than N!")
+
         print("+++Executing Lanczos algorithm")
         self.n = n
         H = self.H
@@ -60,8 +63,10 @@ class Lanczos:
         for j in tqdm(range(0, n)):
             beta[j-1] = np.linalg.norm(r)
             V[:,j] = r/beta[j-1]
+            # REORTHOGONALIZATION:
+            self.reorthogonalize(V, j)
             r = np.dot(H, V[:,j])
-            # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: CHECK WTF
+            # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
             alpha[j] = np.dot(V[:,j], r)
             r = r - V[:,j]*alpha[j] - V[:,j-1]*beta[j-1]
 
@@ -82,6 +87,9 @@ class Lanczos:
 
 
     def get_H_eigs(self):
+        if not self.Lanczos_has_been_executed:
+            raise ValueError("Lanczos Algorithm has not been called.")
+
         print("+++ Converting eigenvectors from H_eff to H basis.")
         N, n, V = self.N, self.n, self.V
         H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)
@@ -102,6 +110,9 @@ class Lanczos:
     def compare_eigs(self):
         """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors.
         """
+        if not self.Lanczos_has_been_executed:
+            raise ValueError("Lanczos Algorithm has not been called.")
+
         eigval_actual, eigvec_actual = np.linalg.eigh(self.H)
         eigval_estimate, eigvec_estimate = self.H_eigvals, self.H_eigvecs
 
@@ -125,6 +136,12 @@ class Lanczos:
 
 
     @staticmethod
+    def reorthogonalize(V, j):
+        """ Reorthogonalizes element number i in V matrix."""
+        for i in range(j):
+            V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
+
+    @staticmethod
     def test_is_Hermitian(A):
         """Tests if A is Hermitian."""
         assert (np.matrix(A) == np.matrix(A).A).all(),\
@@ -137,21 +154,23 @@ class Lanczos:
             no_assert = Setting this to True will NOT run a test, and instead
                                 return the inner product of the least normal vector.
         """
-        least_normalized = 1
-        for i in range(np.shape(V)[1]):
-            normalization = np.linalg.norm(V[:,i])
-            if abs(normalization - 1) > (least_normalized - 1):
-                least_normalized = normalization
+        N = np.shape(V)[1]
+        normalizations = np.zeros(N)
+        for i in range(N):
+            normalizations[i] = np.linalg.norm(V[:,i])
+        idx = np.argmin(np.abs(normalizations - 1))
+
         if no_assert:
-            return least_normalized
+            return normalizations[idx]
         else:
-            assert abs(least_normalized-1) < tol,\
-            "VECTOR HAS NORM %.4f. IS NOT NORMALIZED." % least_normalized
+            assert np.abs(normalizations[idx]-1) < tol,\
+            "VECTOR HAS NORM %.4f. IS NOT NORMALIZED." % normalizations
 
 
     @staticmethod
     def test_is_orthogonal(V, tol=0.01, no_assert=False):
-        """ INPUT: V = (M,m) matrix. Tests whether the column vectors of V[:,i] are all orthogonal.
+        """ INPUT: V = (M,m) matrix of normal column vectors.
+            Tests whether the column vectors of V[:,i] are all orthogonal.
             no_assert = Setting this to True will NOT run a test, and instead
                                 return the largest inner product between two vectors.
         """
