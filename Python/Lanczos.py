@@ -4,6 +4,13 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 class Lanczos:
+    """ Class implementation of the Lanczos algorithm.
+        Takes a Hermitian matrix H in the constructor.
+        To use, run
+            execute_Lanczos()
+        and
+            get_H_eigs().
+    """
     def __init__(self, H):
         self.test_is_Hermitian(H)
         self.H = H
@@ -109,7 +116,7 @@ class Lanczos:
 
     
 
-    def compare_eigs(self, minimize="vec"):
+    def compare_eigs(self, minimize="vec", nr_vecs_to_plot=20):
         """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors.
         """
         if not self.Lanczos_has_been_executed:
@@ -141,7 +148,10 @@ class Lanczos:
 
         print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
         print("%6s %6s %20s %20s %14s %14s" % ("Idx1", "Idx2", "Actual", "Lanczos", "% Diff", "Eigvec Prod"))
-        for i in range(N):
+        for i in range(nr_vecs_to_plot):
+            print("%6.0d %6.0f %20.10f %20.10f %14.4f %14.4f" % (i, idx_pairs[i], eigval_pairs[i,0], eigval_pairs[i,1], perc_diff_eigval[i], eigvec_innerprod[i]))
+        print("...")
+        for i in range(N-nr_vecs_to_plot, N):
             print("%6.0d %6.0f %20.10f %20.10f %14.4f %14.4f" % (i, idx_pairs[i], eigval_pairs[i,0], eigval_pairs[i,1], perc_diff_eigval[i], eigvec_innerprod[i]))
 
         # plt.plot(eigvec_innerprod)
@@ -276,6 +286,9 @@ class Lanczos:
             return np.max(errors)
         else:
             assert np.max(errors) > tol, "VECTOR NOT EIGENVECTOR."
+
+
+
 
 
 if __name__ == "__main__":
