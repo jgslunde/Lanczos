@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from Lanczos import Lanczos
 
 N = 1001
-n = 101
+n = 1001
 L = 25 # Length of system in fm.
 dx = float(L)/N
 
@@ -16,14 +16,14 @@ rWell = 17.0/10
 fPow = 4.0
 
 # Potential V matrix setup
-r = np.linspace(0, 2.5, N)
+r = np.linspace(0, L, N)
 V_array = eCores*np.exp(-(r/rCore)**fPow) - eWells*np.exp(-(r/rWell)**fPow)
 V = np.diag(V_array)
 
 # Derivative T matrix setup
 hc = 197.327 # MeV_fm
 rest_energy = 469.4592 # MeV / c^2
-T_factor = hc**2/(2*rest_energy) * 1/dx
+T_factor = hc**2/(2*rest_energy) * 1/dx**2
 
 T = np.zeros((N,N))
 T[0, :2] = [-2*T_factor, T_factor]
@@ -36,10 +36,10 @@ H = (-T + V)
 print("H MATRIX:")
 print(np.array_str(H, precision=2, suppress_small=True))
 
-print("T MATRIX:")
+print("V MATRIX:")
 print(np.array_str(V, precision=2, suppress_small=True))
 
-print("V MATRIX:")
+print("T MATRIX:")
 print(np.array_str(T, precision=2, suppress_small=True))
 
 
