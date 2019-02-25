@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from Lanczos import Lanczos
 
 N = 1001
-n = 1001
+n = 501
 L = 25 # Length of system in fm.
 dx = float(L)/N
 
@@ -26,8 +26,8 @@ rest_energy = 469.4592 # MeV / c^2
 T_factor = hc**2/(2*rest_energy) * 1/dx**2
 
 T = np.zeros((N,N))
-T[0, :2] = [-2*T_factor, T_factor]
-T[-1, -2:] = [T_factor, -2*T_factor]
+T[0, :2] = [-1*T_factor, T_factor]
+T[-1, -2:] = [T_factor, -1*T_factor]
 for i in range(1, N-1):
     T[i, i-1:i+2] = [T_factor, -2*T_factor, T_factor]
 
