@@ -13,7 +13,7 @@ class Lanczos:
             get_H_eigs().
     """
     def __init__(self, H,):
-        self.test_is_Hermitian(H)
+        # self.test_is_Hermitian(H)
         self.H = H
         self.M = np.shape(H)[0]
         self.Lanczos_has_been_executed = False
