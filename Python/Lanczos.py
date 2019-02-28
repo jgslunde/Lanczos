@@ -116,8 +116,8 @@ class Lanczos:
 
     
 
-    def compare_eigs(self, minimize="vec", nr_vecs_to_plot=20):
-        """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors.
+    def compare_eigs(self, nr_vecs_to_plot=20):
+        """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors, matched after max inner product with actual eigenvectors.
         """
         if not self.Lanczos_has_been_executed:
             raise ValueError("Lanczos Algorithm has not been called.")
@@ -136,14 +136,13 @@ class Lanczos:
         idx_pairs = np.zeros(N)
         idx_pairs[:] = np.nan
         for i in range(n):
-            if minimize == "vec":
-                idx = (np.dot(eigvec_estimate[:,i], eigvec_actual)**2 ).argmax()
-            if minimize == "val":
-                idx = (np.abs(eigval_estimate[i] - eigval_actual)).argmin()
-            eigval_pairs[idx,1] = eigval_estimate[i]
-            eigvec_innerprod[idx] = np.dot(eigvec_estimate[:,i], eigvec_actual[:,idx])**2
-            idx_pairs[idx] = i
-
+            idx = (np.dot(eigvec_estimate[:,i], eigvec_actual)**2).argmax()
+            inner_prod = np.dot(eigvec_estimate[:,i], eigvec_actual[:,idx])**2
+            if np.isnan(eigvec_innerprod[idx]) or (inner_prod > eigvec_innerprod[idx]): # If there isn't already a better match, or if there is no match yet.
+                eigval_pairs[idx,1] = eigval_estimate[i]
+                eigvec_innerprod[idx] = inner_prod
+                idx_pairs[idx] = i
+                    
         perc_diff_eigval = abs((eigval_pairs[:,0] - eigval_pairs[:,1])/eigval_pairs[:,1])*100
 
         print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
@@ -161,36 +160,6 @@ class Lanczos:
         # plt.ylim(0,1.2)
         # plt.show()
 
-
-
-    def compare_eigvecs(self):
-        """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors.
-        """
-        if not self.Lanczos_has_been_executed:
-            raise ValueError("Lanczos Algorithm has not been called.")
-
-        eigval_actual, eigvec_actual = np.linalg.eigh(self.H)
-        eigval_estimate, eigvec_estimate = self.H_eigvals, self.H_eigvecs
-
-        N, n = self.N, self.n
-        eigval_pairs = np.empty((N, 2))
-        eigval_pairs[:,0] = eigval_actual
-        eigval_pairs[:,1] = np.nan
-
-        eigvec_innerprod = np.empty(N)
-        eigvec_innerprod[:] = np.nan
-
-        for i in range(N):
-            idx = (np.dot(eigvec_actual[:,i], eigvec_estimate)**2 ).argmax()
-            #idx = (np.sum( ( eigvec_actual[:,i,None] eigvec_estimate)**2, axis=0 )).argmin()
-            #print(np.sum( ( eigvec_actual[:,i,None] - eigvec_estimate)**2, axis=0 ))
-            eigval_pairs[i,1] = eigval_estimate[idx]
-            eigvec_innerprod[i] = np.dot(eigvec_actual[:,i], eigvec_estimate[:,idx])**2
-
-        print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
-        print("%20s %20s %14s %14s" % ("Actual", "Lanczos", "% Diff", "Eigvec Prod"))
-        for i in range(N):
-            print("%20.10f %20.10f %14.4f %14.4f" % (eigval_pairs[i,0], eigval_pairs[i,1], abs((eigval_pairs[i,0] - eigval_pairs[i,1])/eigval_pairs[i,0]*100), eigvec_innerprod[i]))
 
 
 
