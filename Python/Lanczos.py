@@ -17,7 +17,9 @@ class Lanczos:
         self.H = H
         self.M = np.shape(H)[0]
         self.Lanczos_has_been_executed = False
+
         self.H_eigs_have_been_found = False
+        self.H_exact_eigs_have_been_found = False
 
     @property
     def H_eff(self):
@@ -44,6 +46,26 @@ class Lanczos:
         if not self.H_eigs_have_been_found:
             self.get_H_eigs()
         return self._H_eigvals
+
+    @property
+    def H_eigvals_actual(self):
+        if not self.H_exact_eigs_have_been_found:
+            self.find_exact_eigs()
+            self.H_exact_eigs_have_been_found = True
+        return self._H_eigvals_actual
+
+    @property
+    def H_eigvecs_actual(self):
+        if not self.H_exact_eigs_have_been_found:
+            self.find_exact_eigs()
+            self.H_exact_eigs_have_been_found = True
+        return self._H_eigvecs_actual
+
+    def find_exact_eigs(self, nr_vecs=20):
+        print("+++ Calculating exact eigs using scipy.sparse.linalg.eigsh.")
+        self._H_eigvals_actual, self._H_eigvecs_actual = scipy.sparse.linalg.eigsh(self.H, k=nr_vecs, which="SM")
+        print("+++ Finished calculating exact eigs.")
+
 
 
     def execute_Lanczos(self, n, seed=99):
@@ -118,19 +140,17 @@ class Lanczos:
 
     
 
-    def compare_eigs(self, nr_vecs=40):
+    def compare_eigs(self):
         """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors, matched after max inner product with actual eigenvectors. Note that this will only really work if H is small, and exact eigenvectors can be solved with numpy.
         """
         if not self.Lanczos_has_been_executed:
             raise ValueError("Lanczos Algorithm has not been called.")
 
         print("+++ Comparing to exact eigs.")
-        print("+++ Calculating exact eigs.")
-        eigval_actual, eigvec_actual = scipy.sparse.linalg.eigsh(self.H, k=nr_vecs, which="SM")
-        print("+++ Finished calculating exact eigs.")
+        eigval_actual, eigvec_actual = self.H_eigvals_actual, self.H_eigvecs_actual
         eigval_estimate, eigvec_estimate = self.H_eigvals, self.H_eigvecs
 
-        N, n = self.M, self.n
+        N, n, nr_vecs = self.M, self.n, len(eigval_actual)
         eigval_pairs = np.empty((nr_vecs, 2))
         eigval_pairs[:,0] = eigval_actual
         eigval_pairs[:,1] = np.nan
