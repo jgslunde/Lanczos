@@ -11,7 +11,8 @@ class Lanczos:
         and
             get_H_eigs().
     """
-    def __init__(self, H):
+    def __init__(self, H,):
+        self.H_is_sparse = True
         self.test_is_Hermitian(H)
         self.H = H
         self.N = np.shape(H)[0]
@@ -64,7 +65,7 @@ class Lanczos:
         V[:,0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
-        r = np.dot(H, V[:,0])
+        r = H*V[:,0]
         alpha[0] = np.dot(r, V[:,0])
         r = r - alpha[0]*V[:,0] 
         for j in tqdm(range(0, n)):
@@ -72,7 +73,7 @@ class Lanczos:
             V[:,j] = r/beta[j-1]
             # REORTHOGONALIZATION:
             self.reorthogonalize(V, j)
-            r = np.dot(H, V[:,j])
+            r = H*V[:,j]
             # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
             alpha[j] = np.dot(V[:,j], r)
             r = r - V[:,j]*alpha[j] - V[:,j-1]*beta[j-1]
@@ -117,12 +118,12 @@ class Lanczos:
     
 
     def compare_eigs(self, nr_vecs_to_plot=20):
-        """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors, matched after max inner product with actual eigenvectors.
+        """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors, matched after max inner product with actual eigenvectors. Note that this will only really work if H is small, and exact eigenvectors can be solved with numpy.
         """
         if not self.Lanczos_has_been_executed:
             raise ValueError("Lanczos Algorithm has not been called.")
 
-        eigval_actual, eigvec_actual = np.linalg.eigh(self.H)
+        eigval_actual, eigvec_actual = np.linalg.eigh(self.H.toarray())
         eigval_estimate, eigvec_estimate = self.H_eigvals, self.H_eigvecs
 
         N, n = self.N, self.n
@@ -201,8 +202,7 @@ class Lanczos:
     @staticmethod
     def test_is_Hermitian(A):
         """Tests if A is Hermitian."""
-        assert (np.matrix(A) == np.matrix(A).A).all(),\
-        "A IS NOT HERMITIAN!"
+        assert (A == A.A).all(), "A IS NOT HERMITIAN!"
 
 
     @staticmethod
