@@ -1,6 +1,7 @@
 import numpy as np
+import scipy.sparse.linalg
 import matplotlib.pyplot as plt
-#import cupy as cp
+# import cupy as cp
 from tqdm import tqdm
 
 class Lanczos:
@@ -12,10 +13,9 @@ class Lanczos:
             get_H_eigs().
     """
     def __init__(self, H,):
-        self.H_is_sparse = True
         self.test_is_Hermitian(H)
         self.H = H
-        self.N = np.shape(H)[0]
+        self.M = np.shape(H)[0]
         self.Lanczos_has_been_executed = False
         self.H_eigs_have_been_found = False
 
@@ -47,21 +47,22 @@ class Lanczos:
 
 
     def execute_Lanczos(self, n, seed=99):
-        if n > self.N:
-            raise ValueError("n cannot be larger than N!")
+        if n > self.M:
+            raise ValueError("n cannot be larger than M!")
 
-        print("+++Executing Lanczos algorithm")
+        print("+++ Executing Lanczos algorithm")
         self.n = n
+
         H = self.H
-        N = self.N
+        M = self.M
         np.random.seed(seed)
 
         # Random normalized start vector v0 of size N.
-        v0 = np.random.uniform(-1, 1, size=(N))
+        v0 = np.random.uniform(-1, 1, size=(M))
         v0 = v0/np.linalg.norm(v0)
 
         # Lanczos Algorithm
-        V = np.zeros((N, n))  # Matrix of the n generated orthogonal v-vectors.
+        V = np.zeros((M, n))  # Matrix of the n generated orthogonal v-vectors.
         V[:,0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
@@ -90,7 +91,7 @@ class Lanczos:
             H_eff[i,i+1] = beta[i]
 
         self._H_eff, self._V = H_eff, V
-        print("+++Lanczos executed successfully.")
+        print("+++ Lanczos executed successfully.")
         self.Lanczos_has_been_executed = True
 
 
@@ -100,11 +101,11 @@ class Lanczos:
             raise ValueError("Lanczos Algorithm has not been called.")
 
         print("+++ Converting eigenvectors from H_eff to H basis.")
-        N, n, V = self.N, self.n, self.V
+        M, n, V = self.M, self.n, self.V
         H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)
         
         # Transforming H_eff eigvecs to H eigvecs:
-        H_eigvecs_lanczos = np.zeros((N, n))
+        H_eigvecs_lanczos = np.zeros((M, n))
         for i in range(n):
             H_eigvecs_lanczos[:,i] = np.dot(V, H_eff_eigvecs[:,i])
         self.test_is_normalized(H_eigvecs_lanczos, tol=0.001)
@@ -117,24 +118,27 @@ class Lanczos:
 
     
 
-    def compare_eigs(self, nr_vecs_to_plot=20):
+    def compare_eigs(self, nr_vecs=40):
         """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors, matched after max inner product with actual eigenvectors. Note that this will only really work if H is small, and exact eigenvectors can be solved with numpy.
         """
         if not self.Lanczos_has_been_executed:
             raise ValueError("Lanczos Algorithm has not been called.")
 
-        eigval_actual, eigvec_actual = np.linalg.eigh(self.H.toarray())
+        print("+++ Comparing to exact eigs.")
+        print("+++ Calculating exact eigs.")
+        eigval_actual, eigvec_actual = scipy.sparse.linalg.eigsh(self.H, k=nr_vecs, which="SM")
+        print("+++ Finished calculating exact eigs.")
         eigval_estimate, eigvec_estimate = self.H_eigvals, self.H_eigvecs
 
-        N, n = self.N, self.n
-        eigval_pairs = np.empty((N, 2))
+        N, n = self.M, self.n
+        eigval_pairs = np.empty((nr_vecs, 2))
         eigval_pairs[:,0] = eigval_actual
         eigval_pairs[:,1] = np.nan
 
-        eigvec_innerprod = np.empty(N)
+        eigvec_innerprod = np.empty(nr_vecs)
         eigvec_innerprod[:] = np.nan
 
-        idx_pairs = np.zeros(N)
+        idx_pairs = np.zeros(nr_vecs)
         idx_pairs[:] = np.nan
         for i in range(n):
             idx = (np.dot(eigvec_estimate[:,i], eigvec_actual)**2).argmax()
@@ -148,10 +152,7 @@ class Lanczos:
 
         print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
         print("%6s %6s %20s %20s %14s %14s" % ("Idx1", "Idx2", "Actual", "Lanczos", "% Diff", "Eigvec Prod"))
-        for i in range(nr_vecs_to_plot):
-            print("%6.0d %6.0f %20.10f %20.10f %14.4f %14.4f" % (i, idx_pairs[i], eigval_pairs[i,0], eigval_pairs[i,1], perc_diff_eigval[i], eigvec_innerprod[i]))
-        print("...")
-        for i in range(N-nr_vecs_to_plot, N):
+        for i in range(nr_vecs):
             print("%6.0d %6.0f %20.10f %20.10f %14.4f %14.4f" % (i, idx_pairs[i], eigval_pairs[i,0], eigval_pairs[i,1], perc_diff_eigval[i], eigvec_innerprod[i]))
 
         # plt.plot(eigvec_innerprod)
