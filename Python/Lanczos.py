@@ -1,9 +1,11 @@
 import numpy as np
 import scipy.sparse.linalg
 import matplotlib.pyplot as plt
-# import cupy as cp
+import cupy as cp
+import cupyx.scipy.sparse
 from tqdm import tqdm
-
+import time
+import sys
 class Lanczos:
     """ Class implementation of the Lanczos algorithm.
         Takes a Hermitian matrix H in the constructor.
@@ -68,7 +70,7 @@ class Lanczos:
 
 
 
-    def execute_Lanczos(self, n, seed=99):
+    def execute_Lanczos(self, n, seed=99, use_cuda=True):
         if n > self.M:
             raise ValueError("n cannot be larger than M!")
 
@@ -77,6 +79,13 @@ class Lanczos:
 
         H = self.H
         M = self.M
+
+        if use_cuda:
+            H = cupyx.scipy.sparse.csc_matrix(H)
+            import cupy as np
+        else:
+            import numpy as np
+
         np.random.seed(seed)
 
         # Random normalized start vector v0 of size N.
@@ -95,7 +104,7 @@ class Lanczos:
             beta[j-1] = np.linalg.norm(r)
             V[:,j] = r/beta[j-1]
             # REORTHOGONALIZATION:
-            self.reorthogonalize(V, j)
+            self.reorthogonalize(V, j, use_cuda=use_cuda)
             r = H*V[:,j]
             # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
             alpha[j] = np.dot(V[:,j], r)
@@ -111,6 +120,12 @@ class Lanczos:
             H_eff[i,i-1] = beta[i-1]
             H_eff[i,i] = alpha[i]
             H_eff[i,i+1] = beta[i]
+
+        if use_cuda:
+            import numpy as np
+            H_eff = cp.asnumpy(H_eff)
+            V = cp.asnumpy(V)
+            H = cp.asnumpy(H)
 
         self._H_eff, self._V = H_eff, V
         print("+++ Lanczos executed successfully.")
@@ -215,10 +230,14 @@ class Lanczos:
 
 
     @staticmethod
-    def reorthogonalize(V, j):
+    def reorthogonalize(V, j, use_cuda=True):
         """ Reorthogonalizes element number i in V matrix."""
-        for i in range(j):
-            V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
+        if use_cuda:
+            for i in range(j):
+                V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
+        else:
+            for i in range(j):
+                V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
 
     @staticmethod
     def test_is_Hermitian(A):
