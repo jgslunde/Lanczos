@@ -96,9 +96,7 @@ class Lanczos:
         v0 = v0/np.linalg.norm(v0)
 
         # Lanczos Algorithm
-        time.sleep(5)
         V = np.zeros((M, n))  # Matrix of the n generated orthogonal v-vectors.
-        time.sleep(5)
         V[:,0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
