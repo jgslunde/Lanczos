@@ -6,6 +6,8 @@ import cupyx.scipy.sparse
 from tqdm import tqdm
 import time
 import sys
+
+
 class Lanczos:
     """ Class implementation of the Lanczos algorithm.
         Takes a Hermitian matrix H in the constructor.
@@ -81,7 +83,8 @@ class Lanczos:
         M = self.M
 
         if use_cuda:
-            H = cupyx.scipy.sparse.csc_matrix(H)
+            import numpy as np
+            H = cupyx.scipy.sparse.csc_matrix(H,dtype=np.float64)
             import cupy as np
         else:
             import numpy as np
@@ -93,7 +96,9 @@ class Lanczos:
         v0 = v0/np.linalg.norm(v0)
 
         # Lanczos Algorithm
+        time.sleep(5)
         V = np.zeros((M, n))  # Matrix of the n generated orthogonal v-vectors.
+        time.sleep(5)
         V[:,0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
@@ -122,12 +127,13 @@ class Lanczos:
             H_eff[i,i+1] = beta[i]
 
         if use_cuda:
+            # If having used cuda, convert H_eff and V to numpy objects, and H to scipy.sparse.
             import numpy as np
-            H_eff = cp.asnumpy(H_eff)
-            V = cp.asnumpy(V)
-            H = cp.asnumpy(H)
-
-        self._H_eff, self._V = H_eff, V
+            self._H_eff = cp.asnumpy(H_eff)
+            self._V = cp.asnumpy(V)
+            self.H = H.get()
+        else:
+            self._H_eff, self._V = H_eff, V
         print("+++ Lanczos executed successfully.")
         self.Lanczos_has_been_executed = True
 
@@ -152,6 +158,26 @@ class Lanczos:
         self._H_eigvecs = H_eigvecs_lanczos
         print("+++ Finished Converting.")
         self.H_eigs_have_been_found = True
+
+
+    def print_good_eigs(self, tol=0.01, print_nr=20, print_bad=True):
+        """ Prints out found H-eigs that actually match well, requiring Hx = hx => (Hx)/|Hx| = x within a tolerance."""
+        H, eigvecs, eigvals = self.H, self.H_eigvecs, self.H_eigvals
+        inner_prod = np.zeros(self.n)
+        for i in range(self.n):
+            eigvec = eigvecs[:,i]
+            eigval = eigvals[i]
+            Hv = H*eigvec
+            Hv = Hv/np.linalg.norm(Hv)
+            inner_prod[i] = np.dot(Hv, eigvec)**2
+
+        print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
+        print("%12s %12s" % ("Eigval", "Eigvec InnerProd"))
+        for i in range(print_nr):
+            if abs(1 - inner_prod[i]) < tol:
+                print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
+            else:
+                print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
 
     
 
