@@ -86,8 +86,8 @@ def potential(x, y, z):
     fPow = 4.0
     return eCores*np.exp(-(r/rCore)**fPow) - eWells*np.exp(-(r/rWell)**fPow)
 
-N = 30
-n = 201
+N = 20
+n = 100
 L = 8 # Length of system in fm.
 dx = float(L)/N
 
@@ -122,14 +122,15 @@ print(T_sparse)
 
 # Running Lanczos
 TEST = Lanczos(H)
-TEST.execute_Lanczos(n)
+TEST.execute_Lanczos(n, use_cuda=True)
 l_L, v_L = TEST.H_eigvals, TEST.H_eigvecs
+TEST.print_good_eigs()
 
 # Comparing to analytical results.
-TEST.compare_eigs()
+# TEST.compare_eigs()
 
 # Plotting groundstate
-l, v = scipy.sparse.linalg.eigsh(H)
-numpy_groundstate = ravel_array(v[:,0])
-plt.plot(numpy_groundstate[:, N//2, N//2])
-plt.show()
+# l, v = scipy.sparse.linalg.eigsh(H)
+# numpy_groundstate = ravel_array(v[:,0])
+#plt.plot(numpy_groundstate[:, N//2, N//2])
+#plt.show()

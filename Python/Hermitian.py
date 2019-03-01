@@ -31,7 +31,7 @@ class Hermitian:
                     idx = self.unravel_xyz(i, j, k)
                     row_ind.append(idx); col_ind.append(idx)
                     data.append(self.potential(self.x[i], self.y[j], self.z[k]))
-        self.V_sparse = scipy.sparse.csr_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
+        self.V_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
 
 
     def create_sparse_T(self):
@@ -48,7 +48,7 @@ class Hermitian:
             row_ind.append(i)
             col_ind.append(i)
             data.append(-6*T_factor)
-        self.T_sparse = scipy.sparse.csr_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
+        self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
 
 
 
