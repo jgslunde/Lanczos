@@ -223,6 +223,20 @@ class Lanczos:
 
 
 
+    @staticmethod
+    def reorthogonalize(V, j, use_cuda=True):
+        """ Reorthogonalizes element number i in V matrix."""
+        if use_cuda:
+            inner_prods = np.sum(V[:,j,None]*V, axis=0)
+            V[:,j] = 2*V[:,j] - np.sum(inner_prods*V, axis=1)
+            # for i in range(j): # Old loop implementation
+            #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
+        else:
+            inner_prods = np.sum(V[:,j,None]*V[:,:j], axis=0)
+            V[:,j] = V[:,j] - np.sum(inner_prods*V[:,:j], axis=1)
+            # for i in range(j):
+                # V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
+
 
     @staticmethod
     def get_matched_eigs(v, vL, l, lL):
@@ -254,16 +268,6 @@ class Lanczos:
 
 
     @staticmethod
-    def reorthogonalize(V, j, use_cuda=True):
-        """ Reorthogonalizes element number i in V matrix."""
-        if use_cuda:
-            for i in range(j):
-                V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
-        else:
-            for i in range(j):
-                V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
-
-    @staticmethod
     def test_is_Hermitian(A):
         """Tests if A is Hermitian."""
         assert (A == A.A).all(), "A IS NOT HERMITIAN!"
@@ -285,7 +289,7 @@ class Lanczos:
             return normalizations[idx]
         else:
             assert np.abs(normalizations[idx]-1) < tol,\
-            "VECTOR HAS NORM %.4f. IS NOT NORMALIZED." % normalizations
+            "VECTOR HAS NORM %.4f. IS NOT NORMALIZED." % normalizations[idx]
 
 
     @staticmethod
