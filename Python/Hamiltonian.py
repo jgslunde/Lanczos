@@ -2,8 +2,8 @@ import numpy as np
 import scipy.sparse
 from tqdm import tqdm
 
-class Hermitian:
-    """ Class for setting up Hermitian. """
+class Hamiltonian:
+    """ Class for setting up Hamiltonian. """
     def __init__(self, N, L, potential, T_factor):
         self.N = N
         self.L = L # Length of system in fm.

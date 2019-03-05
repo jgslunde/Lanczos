@@ -86,9 +86,9 @@ def potential(x, y, z):
     fPow = 4.0
     return eCores*np.exp(-(r/rCore)**fPow) - eWells*np.exp(-(r/rWell)**fPow)
 
-N = 20
-n = 100
-L = 8 # Length of system in fm.
+N = 80
+n = 180
+L = 12 # Length of system in fm.
 dx = float(L)/N
 
 # Derivative T matrix setup
@@ -97,8 +97,8 @@ rest_energy = 469.4592 # MeV / c^2
 T_factor = hc**2/(2*rest_energy) * 1/dx**2
 
 
-from Hermitian import Hermitian
-system = Hermitian(N, L, potential, T_factor)
+from Hamiltonian import Hamiltonian
+system = Hamiltonian(N, L, potential, T_factor)   
 system.create_sparse_T()
 system.create_sparse_V()
 T_sparse = system.T_sparse
