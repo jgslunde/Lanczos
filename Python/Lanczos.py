@@ -233,12 +233,10 @@ class Lanczos:
             # for i in range(j): # Old loop implementation
             #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
         else:
-            if j != 0:
-                inner_prods = np.sum(V[:,j,None]*V[:,:j], axis=0)
-                V[:,j] = V[:,j] - np.sum(inner_prods*V[:,:j], axis=1)
-                # for i in range(j):
-                    # V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
-
+            inner_prods = np.sum(V[j]*V, axis=1)
+            V[j] = 2*V[j] - np.sum(inner_prods[:,None]*V, axis=0)
+            # for i in range(j):
+                # V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
 
     @staticmethod
     def get_matched_eigs(v, vL, l, lL):
