@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.sparse
+import os
 from tqdm import tqdm
 
 class Hamiltonian:
@@ -23,6 +24,9 @@ class Hamiltonian:
         self.neighbors_relative_27point = np.array([[i,j,k] for i in range(-1,2) for j in range(-1,2) for k in range(-1,2)])
         self.weights_27point = self.get_weights_27point()
 
+        if not os.path.exists("T_matrices"):
+            os.makedirs("T_matrices")
+
 
     def create_sparse_Hamiltonian(self):
         pass
@@ -41,21 +45,28 @@ class Hamiltonian:
         self.V_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
 
 
-    def create_sparse_T(self):
+    def create_sparse_T(self, points="27"):
         print("+++ Setting up sparse laplacian matrix T.")
-        T_factor, N = self.T_factor, self.N
-        row_ind = []; col_ind = []; data = []
-        for i in tqdm(range(N**3)):
-            neighbors, weights = self.Laplacian_27point(i)
-            for j, neighbor in enumerate(neighbors):
-                row_ind.append(i)
-                col_ind.append(neighbor)
-                data.append(T_factor*weights[j])
-            #row_ind.append(i)
-            #col_ind.append(i)
-            #data.append(-6*T_factor*weights[i])
-        self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
-
+        filename = f"T_N={self.N}_Laplace={points}"
+        if os.path.isfile(f"T_matrices/{filename}.npz"):
+            print(f"+++ Laplacian matrix T for N = {self.N} and {points} points already created. Extracting...")
+            self.T_sparse = scipy.sparse.load_npz(f"T_matrices/{filename}.npz")
+        else:
+            print(f"+++ Laplacian matrix T for N = {self.N} and {points} does not exist. Creating...")
+            if points == "7":
+                Laplacian = self.Laplacian_7point
+            elif points =="27":
+                Laplacian = self.Laplacian_27point
+            T_factor, N = self.T_factor, self.N
+            row_ind = []; col_ind = []; data = []
+            for i in tqdm(range(N**3)):
+                neighbors, weights = Laplacian(i)
+                for j, neighbor in enumerate(neighbors):
+                    row_ind.append(i)
+                    col_ind.append(neighbor)
+                    data.append(T_factor*weights[j])
+            self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
+            scipy.sparse.save_npz(f"T_matrices/{filename}.npz", self.T_sparse)
 
 
 
