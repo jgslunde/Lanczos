@@ -96,22 +96,23 @@ class Lanczos:
         v0 = v0/np.linalg.norm(v0)
 
         # Lanczos Algorithm
-        V = np.zeros((M, n))  # Matrix of the n generated orthogonal v-vectors.
-        V[:,0] = v0
+        # NOTE: the v-vectors in V are ROW VECTORS within this function, for cache reasons, and is transposed to COLUMN VECTORS upon finishing.
+        V = np.zeros((n, M))  # Matrix of the n generated orthogonal v-vectors. 
+        V[0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
-        r = H*V[:,0]
-        alpha[0] = np.dot(r, V[:,0])
-        r = r - alpha[0]*V[:,0] 
+        r = H*V[0]
+        alpha[0] = np.dot(r, V[0])
+        r = r - alpha[0]*V[0] 
         for j in tqdm(range(0, n)):
             beta[j-1] = np.linalg.norm(r)
-            V[:,j] = r/beta[j-1]
+            V[j] = r/beta[j-1]
             # REORTHOGONALIZATION:
             self.reorthogonalize(V, j, use_cuda=use_cuda)
-            r = H*V[:,j]
+            r = H*V[j]
             # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
-            alpha[j] = np.dot(V[:,j], r)
-            r = r - V[:,j]*alpha[j] - V[:,j-1]*beta[j-1]
+            alpha[j] = np.dot(V[j], r)
+            r = r - V[j]*alpha[j] - V[j-1]*beta[j-1]
 
         # Creating H_eff
         H_eff = np.zeros((n, n))
@@ -128,10 +129,10 @@ class Lanczos:
             # If having used cuda, convert H_eff and V to numpy objects, and H to scipy.sparse.
             import numpy as np
             self._H_eff = cp.asnumpy(H_eff)
-            self._V = cp.asnumpy(V)
+            self._V = cp.asnumpy(V.T)
             self.H = H.get()
         else:
-            self._H_eff, self._V = H_eff, V
+            self._H_eff, self._V = H_eff, V.T
         print("+++ Lanczos executed successfully.")
         self.Lanczos_has_been_executed = True
 
@@ -227,15 +228,16 @@ class Lanczos:
     def reorthogonalize(V, j, use_cuda=True):
         """ Reorthogonalizes element number i in V matrix."""
         if use_cuda:
-            inner_prods = np.sum(V[:,j,None]*V, axis=0)
-            V[:,j] = 2*V[:,j] - np.sum(inner_prods*V, axis=1)
+            inner_prods = np.sum(V[j]*V, axis=1)
+            V[j] = 2*V[j] - np.sum(inner_prods[:,None]*V, axis=0)
             # for i in range(j): # Old loop implementation
             #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
         else:
-            inner_prods = np.sum(V[:,j,None]*V[:,:j], axis=0)
-            V[:,j] = V[:,j] - np.sum(inner_prods*V[:,:j], axis=1)
-            # for i in range(j):
-                # V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
+            if j != 0:
+                inner_prods = np.sum(V[:,j,None]*V[:,:j], axis=0)
+                V[:,j] = V[:,j] - np.sum(inner_prods*V[:,:j], axis=1)
+                # for i in range(j):
+                    # V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
 
 
     @staticmethod
