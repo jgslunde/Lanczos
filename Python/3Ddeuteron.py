@@ -39,32 +39,6 @@ def plot_radial_wavefunc(oneD_array):
     plt.plot(threeD_array[N//2:, :,:])
 
 
-def stencil(i):
-    # Given an index i in the unraveled vector, returns the idexes for the 6 neighboring point, in prev/next, (x,y,z) order.
-    x, y, z = ravel_i(i)
-    
-    if x == 0:
-        x_idx_prev, x_idx_next = unravel_xyz(N-1, y, z), unravel_xyz(x+1, y, z)
-    elif x == N-1:
-        x_idx_prev, x_idx_next = unravel_xyz(x-1, y, z), unravel_xyz(0, y, z)
-    else:
-        x_idx_prev, x_idx_next = unravel_xyz(x-1, y, z), unravel_xyz(x+1, y, z)
-
-    if y == 0:
-        y_idx_prev, y_idx_next = unravel_xyz(x, N-1, z), unravel_xyz(x, y+1, z)
-    elif y == N-1:
-        y_idx_prev, y_idx_next = unravel_xyz(x, y-1, z), unravel_xyz(x, 0, z)
-    else:
-        y_idx_prev, y_idx_next = unravel_xyz(x, y-1, z), unravel_xyz(x, y+1, z)
-
-    if z == 0:
-        z_idx_prev, z_idx_next = unravel_xyz(x, y, N-1), unravel_xyz(x, y, z+1)
-    elif z == N-1:
-        z_idx_prev, z_idx_next = unravel_xyz(x, y, z-1), unravel_xyz(x, y, 0)
-    else:
-        z_idx_prev, z_idx_next = unravel_xyz(x, y, z-1), unravel_xyz(x, y, z+1)
-
-    return(x_idx_prev, x_idx_next, y_idx_prev, y_idx_next, z_idx_prev, z_idx_next)
 
 
 
@@ -86,8 +60,8 @@ def potential(x, y, z):
     fPow = 4.0
     return eCores*np.exp(-(r/rCore)**fPow) - eWells*np.exp(-(r/rWell)**fPow)
 
-N = 80
-n = 180
+N = 40
+n = 160
 L = 12 # Length of system in fm.
 dx = float(L)/N
 

@@ -72,42 +72,6 @@ class Hamiltonian:
         z = i//N**2
         return (x, y, z)
 
-    def stencil(self, i):
-        # Given an index i in the unraveled vector, returns the idexes for the 6 neighboring point, in prev/next, (x,y,z) order.
-        ravel_i, unravel_xyz, N = self.ravel_i, self.unravel_xyz, self.N
-        x, y, z = ravel_i(i)
-        
-        if x == 0:
-            x_idx_prev, x_idx_next = unravel_xyz(N-1, y, z), unravel_xyz(x+1, y, z)
-        elif x == N-1:
-            x_idx_prev, x_idx_next = unravel_xyz(x-1, y, z), unravel_xyz(0, y, z)
-        else:
-            x_idx_prev, x_idx_next = unravel_xyz(x-1, y, z), unravel_xyz(x+1, y, z)
-
-        if y == 0:
-            y_idx_prev, y_idx_next = unravel_xyz(x, N-1, z), unravel_xyz(x, y+1, z)
-        elif y == N-1:
-            y_idx_prev, y_idx_next = unravel_xyz(x, y-1, z), unravel_xyz(x, 0, z)
-        else:
-            y_idx_prev, y_idx_next = unravel_xyz(x, y-1, z), unravel_xyz(x, y+1, z)
-
-        if z == 0:
-            z_idx_prev, z_idx_next = unravel_xyz(x, y, N-1), unravel_xyz(x, y, z+1)
-        elif z == N-1:
-            z_idx_prev, z_idx_next = unravel_xyz(x, y, z-1), unravel_xyz(x, y, 0)
-        else:
-            z_idx_prev, z_idx_next = unravel_xyz(x, y, z-1), unravel_xyz(x, y, z+1)
-
-        return(x_idx_prev, x_idx_next, y_idx_prev, y_idx_next, z_idx_prev, z_idx_next)
-
-
-    def test_stencil(self):
-        # Tests that the stencil gives back the right coordinates for egde cases.
-        N, stencil, unravel_xyz = self.N, self.stencil, self.unravel_xyz
-        x, y, z = 0, 0, 0
-        x_prev, x_next, y_prev, y_next, z_prev, z_next = stencil(unravel_xyz(x, y, z))
-        assert (x_prev, x_next, y_prev, y_next, z_prev, z_next) == (N-1, 1, (N-1)*N, N, (N-1)*N**2, N**2)
-
 
     def Laplacian_7point(self, i):
         # Returns the points with weights of the laplacian.
