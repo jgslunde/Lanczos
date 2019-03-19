@@ -72,7 +72,7 @@ class Lanczos:
 
 
 
-    def execute_Lanczos(self, n, seed=99, use_cuda=True):
+    def execute_Lanczos(self, n, seed=99, use_cuda=True, v0=None):
         if n > self.M:
             raise ValueError("n cannot be larger than M!")
 
@@ -92,7 +92,10 @@ class Lanczos:
         np.random.seed(seed)
 
         # Random normalized start vector v0 of size N.
-        v0 = np.random.uniform(-1, 1, size=(M))
+        if v0 is None:
+            v0 = np.random.uniform(-1, 1, size=(M))
+        else:
+            v0 = np.array(v0)
         v0 = v0/np.linalg.norm(v0)
 
         # Lanczos Algorithm
@@ -228,8 +231,10 @@ class Lanczos:
     def reorthogonalize(V, j, use_cuda=True):
         """ Reorthogonalizes element number i in V matrix."""
         if use_cuda:
-            inner_prods = np.sum(V[j]*V, axis=1)
-            V[j] = 2*V[j] - np.sum(inner_prods[:,None]*V, axis=0)
+            if j != 0:
+                inner_prods_uv = cp.sum(V[j,:]*V[:j,:], axis=1)
+                inner_prods_uu = cp.sum(V[:j,:]*V[:j,:],axis=1)
+                V[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V[:j,:],axis=0)
             # for i in range(j): # Old loop implementation
             #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
         else:
