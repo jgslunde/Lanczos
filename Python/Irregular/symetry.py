@@ -4,6 +4,7 @@ import time
 from sympy.utilities.iterables import multiset_permutations
 
 def FindMirrorSymetricPoints(points, min_nr_points=9):
+    #TODO switch out sympy multiset_permutations with a preloaded array, from iterables.producs.
     # Takes a [N,d] array of N points, in D dimensions.
     # Returns a [n] array of point indexes, the indexes being the n=<N points which have mirror-symetry over all axis.
     N = points.shape[0]
