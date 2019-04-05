@@ -65,8 +65,36 @@ class IrrGrid:
             coord = box.point_coords_local[idx-box.idx_start]
             coords = coord + disp
             idxs = unravel_ijk(*coords.T, box.n) + box.idx_start
-            return idxs
 
+        else:  # If nearby points crosses into another box, but it has equal spacing, so the grid should be uniform.
+            if D == 1:
+                disp = displacements3D*a
+            elif D == 2:
+                disp = displacements3D_2*a
+            elif D == 3:
+                disp = displacements3D_3*a
+            else:
+                raise ValueError("Displacements larger than 3 not yet implemented.")
+
+            idxs = np.zeros(disp.shape[0], dtype=int)
+            coord = box.point_coords_local[idx-box.idx_start]
+            coords = coord + disp
+            neighbor_disp = (coords + disp > box.n-1).astype(int) - (coords + disp < 0).astype(int)
+
+            for i in range(disp.shape[0]):
+                if (neighbor_disp == 0).all():  # If this point is in our box.
+                    idxs[i] = unravel_ijk(*coords[i], box.n) + box.idx_start
+                else:
+                    if (neighbor_disp[i] == 0).all():
+                        idxs[i] = unravel_ijk(*coords[i], box.n) + box.idx_start
+                    else:
+                        neighbor_box_nr = box.neighbor_disp_dict_reversed[neighbor_disp[i].tobytes()]
+                        neighbor_box = self.BoxList[neighbor_box_nr]
+                        neighbor_coord = coords[i].copy() - neighbor_disp[i]*box.n
+                        neighbor_coord = neighbor_coord//neighbor_box.a*box.a
+                        idxs[i] = unravel_ijk(*neighbor_coord, neighbor_box.a) + neighbor_box.idx_start
+
+        return idxs
 
 
 
@@ -249,25 +277,34 @@ if __name__ == "__main__":
     grid = IrrGrid(N, L)
     grid.SetupBoxes(box_depth=3)
 
-    idx = 1437
-    print(grid.point_coords[2549])
-    print(grid.IsCloseToEdge(idx, 2))
 
-    idxs = grid.GetNearbyPoints(idx, 2)
-    print(idxs)
-    print(grid.point_coords[idxs])
-    print(grid.point_coords[idx])
-    print(np.shape(grid.point_coords[idxs]))
+    idx = 3344
+    print("COORDS:", grid.point_coords[idx])
+    print(grid.IsCloseToEdge(idx, 1))
+    print()
+    neighbors_idxs = grid.GetNearbyPoints(idx, 1)
+    neighbors = grid.point_coords[neighbors_idxs]
 
-
-
-
-
+    neighbors2D = neighbors[:,:2]
+    plt.scatter(*neighbors2D.T)
+    plt.scatter(*grid.point_coords[idx], c="r")
+    plt.show()
 
 
 
 
 
+
+
+    # idx = 1437
+    # print(grid.point_coords[2549])
+    # print(grid.IsCloseToEdge(idx, 1))
+
+    # idxs = grid.GetNearbyPoints(idx, 1)
+    # print(idxs)
+    # print(grid.point_coords[idxs])
+    # print(grid.point_coords[idx])
+    # print(np.shape(grid.point_coords[idxs]))
 
     # x, y = np.meshgrid(np.linspace(0,14,15), np.linspace(0,14,15))
 
