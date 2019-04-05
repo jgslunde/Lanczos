@@ -1,9 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import math as m
+import time
 from tqdm import tqdm
 from itertools import product
 from tools import unravel_ijk, ravel_idx
+from symetry import FindMirrorSymetricPoints
 
 # Pre-calculate every possible neighboring displacement in 3 or 6 dimensions.
 displacements3D = np.array(list(product([-1,0,1], repeat=3)))
@@ -27,8 +29,8 @@ class IrrGrid:
             self.corner_coord = corner_coord  # Coordinate of box corner in units s. Correpsonds to point idx 0.
             self.local_point_idxs = np.arange(0, self.n**3)  # Internal indexes of points in box, idx=0 correponding to box corner.
             self.point_idxs = self.local_point_idxs + idx_start  # Global indexes of points, idx=0 correponding to global lattice corner(and box 0 corner).
-            self.point_coords = np.array([[i,j,k] for k in range(self.n) for j in range(self.n) for i in range(self.n)])*a + corner_coord  # Coordinate of each point, in units of s.
-            self.point_coords_local = np.array([[i,j,k] for k in range(self.n) for j in range(self.n) for i in range(self.n)])*a  # Local coordinate of each point, in units of s.
+            self.point_coords = np.array([[i,j,k] for k in range(self.n) for j in range(self.n) for i in range(self.n)], dtype=int)*a + corner_coord  # Coordinate of each point, in units of s.
+            self.point_coords_local = np.array([[i,j,k] for k in range(self.n) for j in range(self.n) for i in range(self.n)], dtype=int)  # Local coordinate of each point, in units of it's own grid size, a.
             self.neighbors = []  # Box numbers of neighbors, in established order.
             self.neighbor_displacements = []
             self.neighbor_disp_dict = {}
@@ -49,52 +51,45 @@ class IrrGrid:
         box = self.BoxList[box_nr]
         a = box.a
 
-        if D%a != 0:
-            raise ValueError(f"Number of fine grid step D = {D} must be in multiple of box step length a = {a}.")
-
         if not self.IsCloseToEdge(idx, D):  # If nearby points will only include points in current box, stuffs gets easy.
             if D == 1:
-                disp = displacements3D*a
+                disp = displacements3D
             elif D == 2:
-                disp = displacements3D_2*a
+                disp = displacements3D_2
             elif D == 3:
-                disp = displacements3D_3*a
+                disp = displacements3D_3
             else:
                 raise ValueError("Displacements larger than 3 not yet implemented.")
 
-            coord = box.point_coords_local[idx-box.idx_start]
+            coord = box.point_coords_local[idx-box.idx_start]  # Note that these coords are not in units of local grid spacing a, not s.
             coords = coord + disp
             idxs = unravel_ijk(*coords.T, box.n) + box.idx_start
 
         else:  # If nearby points crosses into another box, but it has equal spacing, so the grid should be uniform.
             if D == 1:
-                disp = displacements3D*a
+                disp = displacements3D
             elif D == 2:
-                disp = displacements3D_2*a
+                disp = displacements3D_2
             elif D == 3:
-                disp = displacements3D_3*a
+                disp = displacements3D_3
             else:
                 raise ValueError("Displacements larger than 3 not yet implemented.")
 
             idxs = np.zeros(disp.shape[0], dtype=int)
             coord = box.point_coords_local[idx-box.idx_start]
             coords = coord + disp
-            neighbor_disp = (coords + disp > box.n-1).astype(int) - (coords + disp < 0).astype(int)
+            neighbor_disp = (coords > box.n-1).astype(int) - (coords < 0).astype(int)
 
             for i in range(disp.shape[0]):
-                if (neighbor_disp == 0).all():  # If this point is in our box.
+                if (neighbor_disp[i] == 0).all(): # If this point is in our box.
                     idxs[i] = unravel_ijk(*coords[i], box.n) + box.idx_start
                 else:
-                    if (neighbor_disp[i] == 0).all():
-                        idxs[i] = unravel_ijk(*coords[i], box.n) + box.idx_start
-                    else:
-                        neighbor_box_nr = box.neighbor_disp_dict_reversed[neighbor_disp[i].tobytes()]
-                        neighbor_box = self.BoxList[neighbor_box_nr]
-                        neighbor_coord = coords[i].copy() - neighbor_disp[i]*box.n
-                        neighbor_coord = neighbor_coord//neighbor_box.a*box.a
-                        idxs[i] = unravel_ijk(*neighbor_coord, neighbor_box.a) + neighbor_box.idx_start
-
-        return idxs
+                    neighbor_box_nr = box.neighbor_disp_dict_reversed[neighbor_disp[i].tobytes()]
+                    neighbor_box = self.BoxList[neighbor_box_nr]
+                    neighbor_coord = coords[i].copy() - neighbor_disp[i]*box.n
+                    neighbor_coord = (neighbor_coord*box.a)//neighbor_box.a
+                    idxs[i] = unravel_ijk(*neighbor_coord, neighbor_box.n) + neighbor_box.idx_start
+        return np.unique(idxs)
 
 
 
@@ -105,9 +100,6 @@ class IrrGrid:
         coords = np.array(ravel_idx(idx - box.idx_start, box.n))  # Calculate the "internal" i,j,k, where 0,0,0 corresponds to box corner.
         disp = displacements3D.copy()*D
         neighbor_disp = (coords + disp > box.n-1).astype(int) - (coords + disp < 0).astype(int)
-        print(coords)
-        print(box.corner_coord)
-        print(self.point_coords[idx])
         return len(np.unique(neighbor_disp, axis=0)) > 1
 
 
@@ -151,13 +143,11 @@ class IrrGrid:
             disp_bytes = disp[i].tobytes()
             if disp_bytes in box.neighbor_disp_dict_reversed:
                 boxes_to_consider.append(box.neighbor_disp_dict_reversed[disp[i].tobytes()])
-        print(boxes_to_consider)
         a = np.max(self.aList[boxes_to_consider])  # Global a used for all relevant boxes, equal to the highest a of all relevant boxes.
 
 
         counter = 0
         jump = a//box.a
-        print("yo", i0, j0, k0, box.n)
         # Now, considering the chosen spacing (which might be from a neighboring box), let's go a step of size a in each direction.
         for k in range(-a, a+1, a):
             for j in range(-a, a+1, a):
@@ -167,7 +157,6 @@ class IrrGrid:
                         points[counter] = unravel_ijk(x, y, z, box.n) + box.idx_start
                         counter += 1
                         disp = (np.array([i,j,k]) > box.n-1).astype(int) - (np.array([i,j,k]) < 0).astype(int)
-                        # print("woop", disp)
                     else:
                         # If point is outside box, find out in which direction. We create a "box displacement vector", [x,y,z], with x,y,z in {-1,0,1}.
                         out_of_box_disp = (np.array([x, y, z]) > box.n-1).astype(int) - (np.array([x, y, z]) < 0).astype(int)
@@ -198,8 +187,8 @@ class IrrGrid:
 
 
     def CalculatePointDensity(self, nr_boxes):
-        self.aList = np.ones(nr_boxes, dtype=int)
-        self.aList[14] = 1
+        self.aList = np.ones(nr_boxes, dtype=int) + 1
+        self.aList[13] = 1
 
 
     def SetupBoxes(self, box_depth):
@@ -211,15 +200,14 @@ class IrrGrid:
         self.CalculatePointDensity(box_depth**3)
         self.nr_points = np.sum((self.N_per_box//self.aList)**3, dtype=int)
         self.get_box_nr_from_idx = np.zeros(self.nr_points, dtype=int)
-        self.point_coords = np.zeros((self.nr_points, 3))
+        self.point_coords = np.zeros((self.nr_points, 3), dtype=int)
 
 
         box_corners = np.array([[i,j,k] for k in range(box_depth) for j in range(box_depth) for i in range(box_depth)])*self.N//box_depth
         self.BoxList = []
         current_nr_points = 0
         for i in range(box_depth**3):
-            N_in_this_box = self.N_per_box//self.aList[i]
-            box = self.Box(i, current_nr_points, 1, N_in_this_box, box_corners[i])
+            box = self.Box(i, current_nr_points, self.aList[i], self.N_per_box, box_corners[i])
             self.BoxList.append(box)
             self.point_coords[current_nr_points : current_nr_points + box.nr_points] = box.point_coords
             self.get_box_nr_from_idx[current_nr_points : current_nr_points + box.nr_points] = i
@@ -227,15 +215,16 @@ class IrrGrid:
 
         displacements = np.array([[i,j,k] for k in range(-1,2) for j in range(-1,2) for i in range(-1,2)])
         for i in range(box_depth**3):
+
             box = self.BoxList[i]
-            for j in range(27):
+            for j in range(box_depth**3):
                 disp = displacements[j]
                 if (disp != 0).any():
-                    neighbor_idx = self.FindRelativeIndex(i, self.N, disp)
+                    neighbor_idx = self.FindRelativeIndex(i, box_depth, disp)
                     box.neighbors.append(neighbor_idx)
                     box.neighbor_displacements.append(disp)
-                    box.neighbor_disp_dict[j] = disp.tobytes()
-                    box.neighbor_disp_dict_reversed[disp.tobytes()] = j
+                    # box.neighbor_disp_dict[j] = disp.tobytes()
+                    box.neighbor_disp_dict_reversed[disp.tobytes()] = neighbor_idx
 
 
 
@@ -272,25 +261,50 @@ class IrrGrid:
 
 
 if __name__ == "__main__":
-    N = 15
+    N = 30
     L = 25
+    box_depth = 3
     grid = IrrGrid(N, L)
-    grid.SetupBoxes(box_depth=3)
+    grid.SetupBoxes(box_depth=box_depth)
 
 
-    idx = 3344
-    print("COORDS:", grid.point_coords[idx])
+    idx = 2334
+    center_coord = grid.point_coords[idx]
+    print("COORDS:", center_coord)
     print(grid.IsCloseToEdge(idx, 1))
     print()
-    neighbors_idxs = grid.GetNearbyPoints(idx, 1)
+    t0 = time.time()
+    neighbor_depth = 3
+    neighbors_idxs = grid.GetNearbyPoints(idx, neighbor_depth)
+    print(time.time() - t0)
     neighbors = grid.point_coords[neighbors_idxs]
 
+    asdf = FindMirrorSymetricPoints(neighbors-center_coord)
+    print(len(neighbors))
+    print(len(asdf))
+
+    print(neighbors)
     neighbors2D = neighbors[:,:2]
-    plt.scatter(*neighbors2D.T)
-    plt.scatter(*grid.point_coords[idx], c="r")
+    fig, ax = plt.subplots(3,3, figsize=(20,20))
+    for i in range(-neighbor_depth, neighbor_depth + 1):
+        k = i + neighbor_depth
+        z = center_coord[2] + int(i)
+        print(z)
+        for j in range(neighbors.shape[0]):
+            if neighbors[j,2] == z:
+                ax[k//3, k%3].scatter(*neighbors[j,:2], c="b")
+                ax[k//3, k%3].set_title(f"Z = {z}")
+                ax[k//3, k%3].set_xlim(center_coord[0]-neighbor_depth*2, center_coord[0]+neighbor_depth*2)
+                ax[k//3, k%3].set_ylim(center_coord[1]-neighbor_depth*2, center_coord[1]+neighbor_depth*2)
+        if i == 0:
+            ax[k//3, k%3].scatter(*center_coord[:2], c="r")
+        # plt.axhline(y=x*N//box_depth-0.5, ls="--", c="y")
+        # plt.axvline(x=x*N//box_depth-0.5, ls="--", c="y")
     plt.show()
-
-
+    # plt.scatter(*neighbors2D.T)
+    # plt.scatter(*grid.point_coords[idx])
+    # plt.xlim(-1, N)
+    # plt.ylim(-1, N)
 
 
 
