@@ -304,4 +304,9 @@ When the points have 90 rotational symetry, we can construct all the common sten
 
 
 
+\section{Random Notes}
+The code implementation for the irregular box-grid setup is such that a box always contains a con
+
+Another thought is that the number of points which is "on the edge" of a box dramatically increases as the number of spatial dimensions increase. For instance, if the boxes have 4s0 gridpoints in each dimension, the outermost layer only represents $1-39^3/40^3 = 0.07 = 7\%$ in three spatial dimensions, while in six, they account for $1-39^6/40^6 = 0.14 = 14\%$. If the boxes were only of 20 points, the numbers are $14\%$ and $26\%$. Edge-points might in other words be a substantial amount of the runtime.    
+
 \end{document}
