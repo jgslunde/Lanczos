@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.sparse
 import os
-from tqdm import tqdm
+from tqdm import trange
 from IrrLap import Laplacian
 
 
@@ -25,37 +25,43 @@ class Hamiltonian:
         print("+++ Setting up sparse potential matrix V.")
         N = self.N
         row_ind = []; col_ind = []; data = []
-        for idx in tqdm(range(self.Grid.nr_gridpoints)):
-            x, y, z = self.Grid(idx) - self.Grid.center
+        for idx in trange(self.Grid.nr_points):
+            x, y, z = self.Grid.point_coords[idx] - self.Grid.potential_center
             row_ind.append(idx); col_ind.append(idx)
             data.append(self.Potential(x, y, z))
         self.V_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3, N**3))
 
-
     def MakeSparseT(self):
         Grid = self.Grid
         N = self.N
-        T_factor = self.T_factor
-        print("+++ Setting up sparse laplacian matrix T.")
-        row_ind = []; col_ind = []; data = []
-        for idx in tqdm(range(Grid.nr_gridpoints)):
-            point = Grid.GridCoords[idx]
-            neighbor_idxs = np.argwhere(np.linalg.norm(Grid.GridCoords - point, axis=1) < 3)
-            # print(len(neighbor_idxs))
-            # print(Grid.GridCoords[neighbor_idxs])
-            neighbor_idxs = neighbor_idxs[neighbor_idxs != idx]  # Remove self from neighbors.
-            # print(neighbor_idxs)
-            # print(Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]])
-            # print(np.linalg.norm( Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]] - point, axis=1))
+        filename = f"T_N={N}_B={Grid.nr_boxes}_Lap=x"
+        if os.path.isfile(f"T_matrices/{filename}.npz"):
+            print(f"+++ Laplacian matrix already created. Extracting...")
+            self.T_sparse = scipy.sparse.load_npz(f"T_matrices/{filename}.npz")
+        else:
+            T_factor = self.T_factor
+            print("+++ Setting up sparse laplacian matrix T.")
+            row_ind = []; col_ind = []; data = []
+            for idx in trange(Grid.nr_points):
+                point = Grid.point_coords[idx]
+                neighbor_idxs = Grid.GetNearbyPoints(idx, 3)
+                
+                neighbor_idxs = neighbor_idxs[neighbor_idxs != idx]  # Remove self from neighbors.
+                if len(neighbor_idxs) < 10:
+                    print(f"WARNING: Only {len(neighbor_idx)} neighbors found when constructing Laplacian.")
+                # print(neighbor_idxs)
+                # print(Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]])
+                # print(np.linalg.norm( Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]] - point, axis=1))
 
-            neighbor_points_relative = Grid.GridCoords[neighbor_idxs] - point
-            weights = Laplacian(neighbor_points_relative)
-            for i in range(len(neighbor_idxs)):
-                neighbor = Grid.GridCoords[neighbor_idxs[i]]
-                row_ind.append(idx)
-                col_ind.append(neighbor_idxs[i])
-                data.append(T_factor*weights[i])
-        self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
+                neighbor_points_relative = Grid.point_coords[neighbor_idxs] - point
+                weights = Laplacian(neighbor_points_relative)
+                for i in range(len(neighbor_idxs)):
+                    neighbor = Grid.point_coords[neighbor_idxs[i]]
+                    row_ind.append(idx)
+                    col_ind.append(neighbor_idxs[i])
+                    data.append(T_factor*weights[i])
+            self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
+            scipy.sparse.save_npz(f"T_matrices/{filename}.npz", self.T_sparse)
 
 
         # filename = f"T_N={self.N}_Laplace={points}"
@@ -81,4 +87,4 @@ class Hamiltonian:
 
 
 if __name__ == "__main__":
-    TEST = Hamiltonian(1,1,1,1)
+    TEST = Hamiltonian(1,1,1)

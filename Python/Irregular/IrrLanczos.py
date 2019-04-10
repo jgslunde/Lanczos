@@ -16,7 +16,7 @@ class IrrLanczos:
         and
             get_H_eigs().
     """
-    def __init__(self, H,):
+    def __init__(self, H):
         # self.test_is_Hermitian(H)
         self.H = H
         self.M = np.shape(H)[0]
@@ -80,15 +80,16 @@ class IrrLanczos:
         self.n = n
 
         H = self.H
-        HT = H.T
         M = self.M
 
         if use_cuda:
             import numpy as np
-            H = cupyx.scipy.sparse.csc_matrix(H,dtype=np.float64)
+            H = cupyx.scipy.sparse.csc_matrix(H, dtype=np.float64)
             import cupy as np
         else:
             import numpy as np
+
+        HT = np.transpose(H)
 
         np.random.seed(seed)
 
@@ -105,7 +106,10 @@ class IrrLanczos:
         V[0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
-        r = HT*(H*V[0])
+        print(H, HT)
+        print(type(H), type(HT))
+        r = H*V[0]
+        r = HT*r
         alpha[0] = np.dot(r, V[0])
         r = r - alpha[0]*V[0] 
         for j in tqdm(range(0, n)):
@@ -180,7 +184,7 @@ class IrrLanczos:
             if abs(1 - inner_prod[i]) < tol:
                 print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
             else:
-                print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
+                print(f"\033[33m{np.sqrt(eigvals[i]):12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
 
     
 

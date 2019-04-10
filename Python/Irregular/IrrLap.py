@@ -32,7 +32,6 @@ def HashList(points, bits_per_point = 10):  # bit-shift of 5 means that values u
         h += (h_arr[i]<<(bits_per_point*i))
     return h
 
-
 def Laplacian(points):
     """
     INPUT: points - [nr_points, 3] array of grid-points by their relative offset from "center point"

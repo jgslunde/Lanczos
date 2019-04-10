@@ -10,8 +10,9 @@ from IrrHamiltonian import Hamiltonian
 from IrrGrid import IrrGrid
 from Potentials import Deuterium3DPotential
 
-N = 30
+N = 48
 L = 25
+box_depth = 1
 
 dx = float(L)/N
 
@@ -20,6 +21,7 @@ rest_energy = 469.4592 # MeV / c^2
 T_factor = hc**2/(2*rest_energy) * 1/dx**2
 
 Grid = IrrGrid(N, L)
+Grid.SetupBoxes(box_depth=box_depth)
 Ham = Hamiltonian(Grid, Deuterium3DPotential, T_factor)
 Ham.MakeSparseH()
 
@@ -35,3 +37,4 @@ print(Ham.T_sparse)
 L = IrrLanczos(Ham.H_sparse)
 L.execute_Lanczos(100)
 L.get_H_eigs()
+L.print_good_eigs()

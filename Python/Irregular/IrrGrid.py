@@ -2,10 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math as m
 import time
-from tqdm import tqdm
+from tqdm import trange
 from itertools import product
 from tools import unravel_ijk, ravel_idx
 from symetry import FindMirrorSymetricPoints
+from Potentials import Deuterium3DPotential
 
 # Pre-calculate every possible neighboring displacement in 3 or 6 dimensions.
 displacements3D = np.array(list(product([-1,0,1], repeat=3)))
@@ -186,24 +187,47 @@ class IrrGrid:
 
 
 
-    def CalculatePointDensity(self, nr_boxes):
-        self.aList = np.ones(nr_boxes, dtype=int) + 1
-        self.aList[13] = 1
+
+    def CalculatePointDensity(self, box_corners, box_depth, Potential=Deuterium3DPotential):
+        print("+++ Calculating grid density in every box...")
+        nr_boxes = box_depth**3
+        E0 = np.array([-1.626, 10.286])
+        E_list = np.zeros(nr_boxes)
+        for i in trange(nr_boxes):
+            box_corner = box_corners[i]
+            x, y, z = np.meshgrid(np.linspace(0, self.L/box_depth, 101), np.linspace(0, self.L/box_depth, 101), np.linspace(0, self.L/box_depth, 101))
+            x += box_corner[0]-self.potential_center
+            y += box_corner[1]-self.potential_center
+            z += box_corner[2]-self.potential_center
+            pot = Potential(x, y, z)
+            E_list[i] = np.max([np.max(np.abs(pot - E0[0])), np.max(np.abs(pot - E0[1]))])
+        a_factor = np.max(np.sqrt(E_list))/np.sqrt(E_list)
+        for i in range(nr_boxes):
+            print(i, a_factor[i])
+
+        # a is set to the (rounded down) nearest 2*N value, unless it exceeds 1/8 the number of fine-grid points in each box,
+        # in which case it is set to that (to avoid any box having less than 8 points).
+        self.aList = 2**np.ceil(np.log(a_factor)/np.log(2))
+        self.aList = np.array([min(int(x), self.N_per_box//8) for x in self.aList])
+        # self.aList = np.array([round(x) for x in a_factor], dtype=int)
+        print(f"+++ Grid density calculation finished. Density ranges from {np.min(self.aList)} to {np.max(self.aList)}")
+
 
 
     def SetupBoxes(self, box_depth):
         if self.N%box_depth != 0:
-            raise ValueError(f"Number of fine grid points N={N} must be multiple of number of boxes in each direction, {box_depth}")
+            raise ValueError(f"Number of fine grid points N={self.N} must be multiple of number of boxes in each direction, {box_depth}")
         else:
             self.N_per_box = self.N//box_depth
 
-        self.CalculatePointDensity(box_depth**3)
+        box_corners = np.array([[i,j,k] for k in range(box_depth) for j in range(box_depth) for i in range(box_depth)])*self.N//box_depth
+
+        self.nr_boxes = box_depth**3
+        self.CalculatePointDensity(box_corners, box_depth)
         self.nr_points = np.sum((self.N_per_box//self.aList)**3, dtype=int)
         self.get_box_nr_from_idx = np.zeros(self.nr_points, dtype=int)
         self.point_coords = np.zeros((self.nr_points, 3), dtype=int)
 
-
-        box_corners = np.array([[i,j,k] for k in range(box_depth) for j in range(box_depth) for i in range(box_depth)])*self.N//box_depth
         self.BoxList = []
         current_nr_points = 0
         for i in range(box_depth**3):
@@ -217,7 +241,7 @@ class IrrGrid:
         for i in range(box_depth**3):
 
             box = self.BoxList[i]
-            for j in range(box_depth**3):
+            for j in range(27):
                 disp = displacements[j]
                 if (disp != 0).any():
                     neighbor_idx = self.FindRelativeIndex(i, box_depth, disp)
@@ -254,13 +278,7 @@ class IrrGrid:
 
 
 
-
-
-
-
-
-
-if __name__ == "__main__":
+def PlotStuff():
     N = 30
     L = 25
     box_depth = 3
@@ -301,6 +319,24 @@ if __name__ == "__main__":
         # plt.axhline(y=x*N//box_depth-0.5, ls="--", c="y")
         # plt.axvline(x=x*N//box_depth-0.5, ls="--", c="y")
     plt.show()
+
+
+
+
+
+
+if __name__ == "__main__":
+    N = 40
+    L = 25
+    box_depth = 10
+    grid = IrrGrid(N, L)
+    grid.SetupBoxes(box_depth=box_depth)
+    pot = Deuterium3DPotential(np.linspace(0, 12.5, 1001), np.zeros(1001), np.zeros(1001))
+    plt.plot(pot)
+    plt.show()
+
+
+
     # plt.scatter(*neighbors2D.T)
     # plt.scatter(*grid.point_coords[idx])
     # plt.xlim(-1, N)
