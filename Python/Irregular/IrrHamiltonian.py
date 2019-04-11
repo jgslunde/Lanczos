@@ -3,7 +3,8 @@ import scipy.sparse
 import os
 from tqdm import trange
 from IrrLap import Laplacian
-
+from symetry import FindMirrorSymetricPoints
+from tools import get_relative_positions
 
 class Hamiltonian:
     """ Class for setting up Hamiltonian. """
@@ -44,8 +45,7 @@ class Hamiltonian:
             row_ind = []; col_ind = []; data = []
             for idx in trange(Grid.nr_points):
                 point = Grid.point_coords[idx]
-                neighbor_idxs = Grid.GetNearbyPoints(idx, 3)
-                
+                neighbor_idxs = Grid.GetNearbyPoints(idx, 1)
                 neighbor_idxs = neighbor_idxs[neighbor_idxs != idx]  # Remove self from neighbors.
                 if len(neighbor_idxs) < 10:
                     print(f"WARNING: Only {len(neighbor_idx)} neighbors found when constructing Laplacian.")
@@ -53,10 +53,13 @@ class Hamiltonian:
                 # print(Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]])
                 # print(np.linalg.norm( Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]] - point, axis=1))
 
-                neighbor_points_relative = Grid.point_coords[neighbor_idxs] - point
+                neighbor_points_relative = get_relative_positions(point, Grid.point_coords[neighbor_idxs], self.N)
                 weights = Laplacian(neighbor_points_relative)
+
+                row_ind.append(idx)
+                col_ind.append(idx)
+                data.append(-44/3*3.0/13*T_factor)
                 for i in range(len(neighbor_idxs)):
-                    neighbor = Grid.point_coords[neighbor_idxs[i]]
                     row_ind.append(idx)
                     col_ind.append(neighbor_idxs[i])
                     data.append(T_factor*weights[i])
