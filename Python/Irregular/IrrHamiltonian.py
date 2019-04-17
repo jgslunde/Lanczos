@@ -27,10 +27,11 @@ class Hamiltonian:
         N = self.N
         row_ind = []; col_ind = []; data = []
         for idx in trange(self.Grid.nr_points):
-            x, y, z = self.Grid.point_coords[idx] - self.Grid.potential_center
+            x, y, z = self.Grid.point_coords[idx]*self.Grid.s - self.Grid.potential_center
             row_ind.append(idx); col_ind.append(idx)
             data.append(self.Potential(x, y, z))
         self.V_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3, N**3))
+        scipy.sparse.save_npz("irreg.npz", self.V_sparse)
 
     def MakeSparseT(self):
         Grid = self.Grid
@@ -40,29 +41,31 @@ class Hamiltonian:
             print(f"+++ Laplacian matrix already created. Extracting...")
             self.T_sparse = scipy.sparse.load_npz(f"T_matrices/{filename}.npz")
         else:
-            T_factor = self.T_factor
             print("+++ Setting up sparse laplacian matrix T.")
+            T_factor = self.T_factor
             row_ind = []; col_ind = []; data = []
             for idx in trange(Grid.nr_points):
                 point = Grid.point_coords[idx]
                 neighbor_idxs = Grid.GetNearbyPoints(idx, 1)
                 neighbor_idxs = neighbor_idxs[neighbor_idxs != idx]  # Remove self from neighbors.
-                if len(neighbor_idxs) < 10:
-                    print(f"WARNING: Only {len(neighbor_idx)} neighbors found when constructing Laplacian.")
+                if len(neighbor_idxs) < 16:
+                    print(f"WARNING: Only {len(neighbor_idxs)} neighbors found when constructing Laplacian.")
                 # print(neighbor_idxs)
                 # print(Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]])
                 # print(np.linalg.norm( Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]] - point, axis=1))
 
                 neighbor_points_relative = get_relative_positions(point, Grid.point_coords[neighbor_idxs], self.N)
                 weights = Laplacian(neighbor_points_relative)
-
+                
                 row_ind.append(idx)
                 col_ind.append(idx)
+                if idx == 61:
+                    print(*zip(neighbor_points_relative, weights))
                 data.append(-44/3*3.0/13*T_factor)
                 for i in range(len(neighbor_idxs)):
                     row_ind.append(idx)
                     col_ind.append(neighbor_idxs[i])
-                    data.append(T_factor*weights[i])
+                    data.append(T_factor*weights[i]*2)
             self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
             scipy.sparse.save_npz(f"T_matrices/{filename}.npz", self.T_sparse)
 
