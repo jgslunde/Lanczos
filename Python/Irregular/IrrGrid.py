@@ -10,6 +10,7 @@ from Potentials import Deuterium3DPotential
 
 # Pre-calculate every possible neighboring displacement in 3 or 6 dimensions.
 displacements3D = np.array(list(product([-1,0,1], repeat=3)))
+print(displacements3D)
 displacements6D = np.array(list(product([-1,0,1], repeat=6)))
 displacements3D_2 = np.array(list(product([-2,-1,0,1,2], repeat=3)))
 displacements3D_3 = np.array(list(product([-3,-2,-1,0,1,2,3], repeat=3)))
@@ -42,6 +43,7 @@ class IrrGrid:
     def __init__(self, N, L, d=3):
         self.N = N
         self.L = L
+        self.s = L/(N-1) # Fine-grid distance is length of box divided by number of intervals, which is number of lattice points - 1.
         self.potential_center = L/2.0
 
 
@@ -196,20 +198,20 @@ class IrrGrid:
         for i in trange(nr_boxes):
             box_corner = box_corners[i]
             x, y, z = np.meshgrid(np.linspace(0, self.L/box_depth, 101), np.linspace(0, self.L/box_depth, 101), np.linspace(0, self.L/box_depth, 101))
-            x += box_corner[0]-self.potential_center
-            y += box_corner[1]-self.potential_center
-            z += box_corner[2]-self.potential_center
+            x += box_corner[0]*self.s-self.potential_center
+            y += box_corner[1]*self.s-self.potential_center
+            z += box_corner[2]*self.s-self.potential_center
             pot = Potential(x, y, z)
             E_list[i] = np.max([np.max(np.abs(pot - E0[0])), np.max(np.abs(pot - E0[1]))])
         a_factor = np.max(np.sqrt(E_list))/np.sqrt(E_list)
-        for i in range(nr_boxes):
-            print(i, a_factor[i])
 
         # a is set to the (rounded down) nearest 2*N value, unless it exceeds 1/8 the number of fine-grid points in each box,
         # in which case it is set to that (to avoid any box having less than 8 points).
         self.aList = 2**np.ceil(np.log(a_factor)/np.log(2))
         self.aList = np.array([min(int(x), self.N_per_box//8) for x in self.aList])
         # self.aList = np.array([round(x) for x in a_factor], dtype=int)
+        for i in range(nr_boxes):
+            print(i, self.aList[i])
         print(f"+++ Grid density calculation finished. Density ranges from {np.min(self.aList)} to {np.max(self.aList)}")
 
 
