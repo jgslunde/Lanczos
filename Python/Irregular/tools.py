@@ -1,5 +1,6 @@
 """ File containing random usefull functions that doesn't really belong anywhere in particular."""
 import numpy as np
+from itertools import repeat
 
 
 def unravel_ijk(i, j, k, N):
@@ -24,3 +25,22 @@ def get_relative_positions(center_pos, pos_array, N):
         delta_pos[:,i] = np.where(np.abs(direct) - np.abs(wraparound) < 0, direct, wraparound)   
     return delta_pos
 
+
+def get_displacement_stencil(D, on_grid, a, stretch_offgrid=True):
+    """INPUT:
+    D = Int. Depth of points in each direction.
+    on_grid = [dims] boolean array, representing if each dimension is on or off grid.
+    a = default spacing in each dimension.
+    stretch_offgrid = Option to include +1 depth in offgrid direction.
+    OUTPUT:
+    """
+
+    disp_options = []
+    for dim in range(3):
+        if on_grid[dim]:
+            disp_options.append(np.arange(-D, D+1, a))
+        else:
+            disp_options.append(np.concatenate((np.arange(-D, 0, a), np.arange(a, D+1, a)), axis=None))
+
+        disp = repeat(disp_options)
+        print(disp)
