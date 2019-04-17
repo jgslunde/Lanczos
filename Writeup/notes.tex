@@ -277,7 +277,7 @@ Inserting this back, we see that the first order terms cancells with the 2, and 
 
 We are left with the final error-estimate:\footnote{(remember that $\Psi''(r) = \kappa^2\Psi(r))$}
 \begin{align}
-    \frac{\epsilon}{\Psi''(r)} = \frac{\kappa^2a^2}{12}
+    \frac{\epsilon}{\Psi''(r)} = \frac{\kappa^2a^2}{12} = \frac{m}{6\hbar^2}E_0a^2 \quad \Rightarrow \quad a = \sqrt{\frac{\epsilon}{\Psi''(r)} \frac{6\hbar^2}{mE_0}} \propto \sqrt{\frac{1}{E_0}}
 \end{align}
 
 
@@ -304,9 +304,35 @@ When the points have 90 rotational symetry, we can construct all the common sten
 
 
 
+
+\section{Nearest Neighbor Search on a Simplified Irregular Lattice}
+As discussed, neighbor-searching on a simplified irregular lattice is less computationally demaning than a general case, because we can rely on the memory layout of each box. It is, however, a bit more techinally challenging to implement. One demand we make, is that each point included in a stencil, must have a symetric counterpart. We will see what implications this has.
+
+ATM, the search goes as follow: Pick a depth $D$, representing the depth of points in each direction we wish to search. For instance, $D=1$ on a regular grid would give us all points 1 step in each dimension, reducing to the 27-point stencil. Remember that we have a set of boxes, which each has a different lattice spacing $a$. The search then takes one of three paths:
+\begin{enumerate}
+    \item We stay inside our box: If moving $D$ steps in all directions doesn't take us to another box, finding neighbors is identical to the regular lattice case.
+    \item We cross into one or several boxes with the same spacing $a$: If doing $D$ steps in each direction crosses some box-borders, but they all have the same spacing, the stencil will look the same as for the regular lattice, and the implementation is not a whole lot more complicated.
+    \item We cross into a differently spaced box. This is the tricky part, and its explained below.
+\end{enumerate}
+
+
+\subsection{Nearest Neighbor Searches in differently spaced boxes}
+Consider a point 
+
+
+
+
+
+
+
+\newpage
 \section{Random Notes}
 The code implementation for the irregular box-grid setup is such that a box always contains a con
 
 Another thought is that the number of points which is "on the edge" of a box dramatically increases as the number of spatial dimensions increase. For instance, if the boxes have 4s0 gridpoints in each dimension, the outermost layer only represents $1-39^3/40^3 = 0.07 = 7\%$ in three spatial dimensions, while in six, they account for $1-39^6/40^6 = 0.14 = 14\%$. If the boxes were only of 20 points, the numbers are $14\%$ and $26\%$. Edge-points might in other words be a substantial amount of the runtime.    
+
+Just confirmed that irreg and reg gives the same Hamiltonian for one big box.
+
+
 
 \end{document}
