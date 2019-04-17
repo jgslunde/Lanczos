@@ -4,13 +4,12 @@ import math as m
 import time
 from tqdm import trange
 from itertools import product
-from tools import unravel_ijk, ravel_idx
+from tools import unravel_ijk, ravel_idx, get_displacement_stencil
 from symetry import FindMirrorSymetricPoints
 from Potentials import Deuterium3DPotential
 
 # Pre-calculate every possible neighboring displacement in 3 or 6 dimensions.
 displacements3D = np.array(list(product([-1,0,1], repeat=3)))
-print(displacements3D)
 displacements6D = np.array(list(product([-1,0,1], repeat=6)))
 displacements3D_2 = np.array(list(product([-2,-1,0,1,2], repeat=3)))
 displacements3D_3 = np.array(list(product([-3,-2,-1,0,1,2,3], repeat=3)))
@@ -54,33 +53,24 @@ class IrrGrid:
         box = self.BoxList[box_nr]
         a = box.a
 
-        if not self.IsCloseToEdge(idx, D):  # If nearby points will only include points in current box, stuffs gets easy.
-            if D == 1:
-                disp = displacements3D
-            elif D == 2:
-                disp = displacements3D_2
-            elif D == 3:
-                disp = displacements3D_3
-            else:
-                raise ValueError("Displacements larger than 3 not yet implemented.")
+        if D == 1:
+            disp = displacements3D
+        elif D == 2:
+            disp = displacements3D_2
+        elif D == 3:
+            disp = displacements3D_3
+        else:
+            raise ValueError("Displacements larger than 3 not yet implemented.")
+        coord = box.point_coords_local[idx-box.idx_start]  # Note that these coords are not in units of local grid spacing a, not s.
+        coords = coord + disp
 
-            coord = box.point_coords_local[idx-box.idx_start]  # Note that these coords are not in units of local grid spacing a, not s.
-            coords = coord + disp
+
+        if not self.IsCloseToEdge(idx, D):  # If nearby points will only include points in current box, stuffs gets easy.
             idxs = unravel_ijk(*coords.T, box.n) + box.idx_start
 
-        else:  # If nearby points crosses into another box, but it has equal spacing, so the grid should be uniform.
-            if D == 1:
-                disp = displacements3D
-            elif D == 2:
-                disp = displacements3D_2
-            elif D == 3:
-                disp = displacements3D_3
-            else:
-                raise ValueError("Displacements larger than 3 not yet implemented.")
 
-            idxs = np.zeros(disp.shape[0], dtype=int)
-            coord = box.point_coords_local[idx-box.idx_start]
-            coords = coord + disp
+        elif not self.IsCloseToEdgeWithDifferentSpacing(idx, D):  # If nearby points crosses into one or more other boxes, but they have identical spacing.
+            idxs = np.zeros((1+2*D)**3, dtype=int)-1
             neighbor_disp = (coords > box.n-1).astype(int) - (coords < 0).astype(int)
 
             for i in range(disp.shape[0]):
@@ -92,7 +82,45 @@ class IrrGrid:
                     neighbor_coord = coords[i].copy() - neighbor_disp[i]*box.n
                     neighbor_coord = (neighbor_coord*box.a)//neighbor_box.a
                     idxs[i] = unravel_ijk(*neighbor_coord, neighbor_box.n) + neighbor_box.idx_start
-        return np.unique(idxs)
+
+
+        ###ASDF__________________________________________________ASDF
+        else:
+            idxs = np.zeros((1+2*D)**3, dtype=int)-1
+            neighbor_disp = (coords > box.n-1).astype(int) - (coords < 0).astype(int)
+            unique_neighbor_disp = np.unique(neighbor_disp, axis=0)
+
+            # FINDING BIGGEST LOCAL a:
+            local_a = box.a
+            for i in range(len(unique_neighbor_disp)):
+                if (unique_neighbor_disp[i] != 0).any():  # Don't wanna include our own box.
+                    neighbor_box_nr = box.neighbor_disp_dict_reversed[unique_neighbor_disp[i].tobytes()]
+                    if self.BoxList[neighbor_box_nr].a > local_a:  # If we find another box with higher a, that is the new local a.
+                        local_a = self.BoxList[neighbor_box_nr].a
+
+            on_grid = coord%local_a == 0  # A boolean array saying whether each axis is on or off grid.
+            disp = disp*local_a  # Increase displacement appropriatly by the local spacing size.
+            disp = disp - (1 - on_grid)*np.sign(disp)  # In off-grid dimensions, reduce displacements by 1 in each direction.
+            coords = coord + disp
+            # get_displacement_stencil(D, on_grid, local_a, )
+
+            # Finally, the disp should fit all neighbors, so simply search for chosen points.
+            for i in range(disp.shape[0]):
+                if (neighbor_disp[i] == 0).all(): # If this point is in our box.
+                    idxs[i] = unravel_ijk(*coords[i], box.n) + box.idx_start
+                else:
+                    neighbor_box_nr = box.neighbor_disp_dict_reversed[neighbor_disp[i].tobytes()]
+                    neighbor_box = self.BoxList[neighbor_box_nr]
+                    neighbor_coord = coords[i].copy() - neighbor_disp[i]*box.n
+                    if ((neighbor_coord*box.a)%neighbor_box.a != 0).any():
+                        raise ValueError("Error: Chosen coordinate does not exist in chosen box!")
+                    neighbor_coord = (neighbor_coord*box.a)//neighbor_box.a  # Since coordinates are in local spacing units, scale by difference in spacing.
+                    idxs[i] = unravel_ijk(*neighbor_coord, neighbor_box.n) + neighbor_box.idx_start
+
+        if (idxs != -1).all():
+            return np.unique(idxs)
+        else:
+            raise ValueError(f"Error: Not all {D**3} indexes could be found, for some reason!")
 
 
 
@@ -281,7 +309,7 @@ class IrrGrid:
 
 
 def PlotStuff():
-    N = 30
+    N = 60
     L = 25
     box_depth = 3
     grid = IrrGrid(N, L)
@@ -328,14 +356,31 @@ def PlotStuff():
 
 
 if __name__ == "__main__":
-    N = 40
+    N = 60
     L = 25
-    box_depth = 10
+    box_depth = 3
     grid = IrrGrid(N, L)
     grid.SetupBoxes(box_depth=box_depth)
-    pot = Deuterium3DPotential(np.linspace(0, 12.5, 1001), np.zeros(1001), np.zeros(1001))
-    plt.plot(pot)
-    plt.show()
+    idx = 14216
+    print(grid.BoxList[13].idx_start)
+    center_coord = grid.point_coords[idx]
+    print("COORDS:", center_coord)
+    print(grid.IsCloseToEdgeWithDifferentSpacing(idx, 1))
+    print()
+    t0 = time.time()
+    neighbor_depth = 1
+    neighbors_idxs = grid.GetNearbyPoints(idx, neighbor_depth)
+    print(time.time() - t0)
+    neighbors = grid.point_coords[neighbors_idxs]
+    print(neighbors)
+
+
+
+
+
+
+
+
 
 
 
@@ -343,10 +388,6 @@ if __name__ == "__main__":
     # plt.scatter(*grid.point_coords[idx])
     # plt.xlim(-1, N)
     # plt.ylim(-1, N)
-
-
-
-
 
     # idx = 1437
     # print(grid.point_coords[2549])
