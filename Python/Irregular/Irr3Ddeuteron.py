@@ -10,9 +10,10 @@ from IrrHamiltonian import Hamiltonian
 from IrrGrid import IrrGrid
 from Potentials import Deuterium3DPotential
 
-N = 48
+n = 100
+N = 120
 L = 25
-box_depth = 1
+box_depth = 3
 
 dx = float(L)/N
 
@@ -35,6 +36,6 @@ print("T:")
 print(Ham.T_sparse)
 
 L = IrrLanczos(Ham.H_sparse)
-L.execute_Lanczos(100)
+L.execute_LanczosOld(n)
 L.get_H_eigs()
 L.print_good_eigs()

@@ -89,7 +89,83 @@ class IrrLanczos:
         else:
             import numpy as np
 
+        np.random.seed(seed)
         HT = np.transpose(H)
+
+        # Random normalized start vector v0 of size N.
+        if v0 is None:
+            v0 = np.random.uniform(-1, 1, size=(M))
+        else:
+            v0 = np.array(v0)
+        v0 = v0/np.linalg.norm(v0)
+
+        # Lanczos Algorithm
+        # NOTE: the v-vectors in V are ROW VECTORS within this function, for cache reasons, and is transposed to COLUMN VECTORS upon finishing.
+        V1 = np.zeros((n, M))  # Matrix of the n generated orthogonal v-vectors. 
+        V1[0] = v0
+        V2 = np.zeros((n, M))
+        V2[0] = v0
+        alpha = np.zeros(n)
+        beta = np.zeros(n-1)
+
+        r = H*V1[0]
+        s = HT*V2[0]
+
+        for j in tqdm(range(0, n)):
+            alpha[j] = np.dot(V1[j], r)
+            r = r - alpha[j]*V1[j]
+
+            beta[j-1] = np.linalg.norm(r)
+            V[j] = r/beta[j-1]
+            # REORTHOGONALIZATION:
+            self.reorthogonalize(V, j, use_cuda=use_cuda)
+            r = HT*(H*V[j])
+            # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
+            alpha[j] = np.dot(V[j], r)
+            r = r - V[j]*alpha[j] - V[j-1]*beta[j-1]
+
+        # Creating H_eff
+        H_eff = np.zeros((n, n))
+        H_eff[0,0] = alpha[0]
+        H_eff[0,1] = beta[0]
+        H_eff[-1,-2] = beta[-1]
+        H_eff[-1,-1] = alpha[-1]
+        for i in tqdm(range(1, n-1)):
+            H_eff[i,i-1] = beta[i-1]
+            H_eff[i,i] = alpha[i]
+            H_eff[i,i+1] = beta[i]
+
+        if use_cuda:
+            # If having used cuda, convert H_eff and V to numpy objects, and H to scipy.sparse.
+            import numpy as np
+            self._H_eff = cp.asnumpy(H_eff)
+            self._V = cp.asnumpy(V.T)
+            self.H = H.get()
+        else:
+            self._H_eff, self._V = H_eff, V.T
+        print("+++ Lanczos executed successfully.")
+        self.Lanczos_has_been_executed = True
+
+
+
+
+
+    def execute_LanczosOld(self, n, seed=99, use_cuda=True, v0=None):
+        if n > self.M:
+            raise ValueError("n cannot be larger than M!")
+
+        print("+++ Executing Lanczos algorithm")
+        self.n = n
+
+        H = self.H
+        M = self.M
+
+        if use_cuda:
+            import numpy as np
+            H = cupyx.scipy.sparse.csc_matrix(H,dtype=np.float64)
+            import cupy as np
+        else:
+            import numpy as np
 
         np.random.seed(seed)
 
@@ -106,10 +182,7 @@ class IrrLanczos:
         V[0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
-        print(H, HT)
-        print(type(H), type(HT))
         r = H*V[0]
-        r = HT*r
         alpha[0] = np.dot(r, V[0])
         r = r - alpha[0]*V[0] 
         for j in tqdm(range(0, n)):
@@ -117,7 +190,7 @@ class IrrLanczos:
             V[j] = r/beta[j-1]
             # REORTHOGONALIZATION:
             self.reorthogonalize(V, j, use_cuda=use_cuda)
-            r = HT*(H*V[j])
+            r = H*V[j]
             # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
             alpha[j] = np.dot(V[j], r)
             r = r - V[j]*alpha[j] - V[j-1]*beta[j-1]
@@ -159,7 +232,7 @@ class IrrLanczos:
         for i in range(n):
             H_eigvecs_lanczos[:,i] = np.dot(V, H_eff_eigvecs[:,i])
         self.test_is_normalized(H_eigvecs_lanczos, tol=0.001)
-        self.test_is_orthogonal(H_eigvecs_lanczos, tol=0.01)
+        # self.test_is_orthogonal(H_eigvecs_lanczos, tol=0.01)
         
         self._H_eigvals = H_eff_eigvals
         self._H_eigvecs = H_eigvecs_lanczos
@@ -184,8 +257,7 @@ class IrrLanczos:
             if abs(1 - inner_prod[i]) < tol:
                 print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
             else:
-                print(f"\033[33m{np.sqrt(eigvals[i]):12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
-
+                print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
     
 
     def compare_eigs(self):
@@ -217,18 +289,6 @@ class IrrLanczos:
                 idx_pairs[idx] = i
                     
         perc_diff_eigval = abs((eigval_pairs[:,0] - eigval_pairs[:,1])/eigval_pairs[:,1])*100
-
-        print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
-        print("%6s %6s %20s %20s %14s %14s" % ("Idx1", "Idx2", "Actual", "Lanczos", "% Diff", "Eigvec Prod"))
-        for i in range(nr_vecs):
-            print("%6.0d %6.0f %20.10f %20.10f %14.4f %14.4f" % (i, idx_pairs[i], eigval_pairs[i,0], eigval_pairs[i,1], perc_diff_eigval[i], eigvec_innerprod[i]))
-
-        # plt.plot(eigvec_innerprod)
-        # plt.plot(1 - perc_diff_eigval, ls="--")
-        # plt.scatter(np.linspace(0, N-1, N), eigvec_innerprod, marker="v")
-        # plt.scatter(np.linspace(0, N-1, N), 1 - perc_diff_eigval, marker="^")
-        # plt.ylim(0,1.2)
-        # plt.show()
 
 
 
