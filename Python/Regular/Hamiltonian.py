@@ -12,9 +12,9 @@ class Hamiltonian:
         self.T_factor = T_factor
         self.dx = float(L)/N
 
-        self.x = np.linspace(-L//2, L//2, N)
-        self.y = np.linspace(-L//2, L//2, N)
-        self.z = np.linspace(-L//2, L//2, N)
+        self.x = np.linspace(-L/2, L/2, N)
+        self.y = np.linspace(-L/2, L/2, N)
+        self.z = np.linspace(-L/2, L/2, N)
 
         # Setting up 7-point stencil and weights.
         self.neighbors_relative_7point = np.array([[0,0,0], [-1,0,0], [0,-1,0], [0,0,-1], [1,0,0], [0,1,0], [0,0,1]])
@@ -130,3 +130,7 @@ class Hamiltonian:
 
 if __name__ == "__main__":
     TEST = Hamiltonian(1,1,1,1)
+    weights = TEST.get_weights_27point()
+    points = TEST.neighbors_relative_27point
+    for i in range(27):
+        print(points[i], weights[i])
