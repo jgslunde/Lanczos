@@ -20,16 +20,17 @@ hashtable = {}
 def HashList(points, bits_per_point = 10):  # bit-shift of 5 means that values up to 2^5 = 32 cause no hash-colisions.
     # Hasing an unordered [n, 3] list of points.
     nr_points, d = points.shape
-
-    h_arr = np.zeros(nr_points, dtype=np.int32)
-
-    for i in range(nr_points):
-        h_arr[i] += points[i,0] + (points[i,1]<<bits_per_point) + (points[i,2]<<bits_per_point*2)
-
     h = 0
-    h_arr.sort()
     for i in range(nr_points):
-        h += (h_arr[i]<<(bits_per_point*i))
+        h += (points[i,0] + points[i,1]*32 + points[i,2]*32**2)*32**(3*i)
+    # h_arr = np.zeros(nr_points, dtype=np.int32)
+
+    # for i in range(nr_points):
+    #     h_arr[i] += points[i,0] + (points[i,1]<<bits_per_point) + (points[i,2]<<bits_per_point*2)
+
+    # h = 0
+    # for i in range(nr_points):
+    #     h += (h_arr[i]<<(bits_per_point*i))
     return h
 
 def Laplacian(points):
@@ -53,9 +54,7 @@ def Laplacian(points):
         for i in range(nr_points):
             r = points[i,0]**2 + points[i,1]**2 + points[i,2]**2
             if r == 0:
-                print()
-                w[i] = 10.0
-                print("Warning, r=0, weight set to 10.")
+                print("Warning, r=0, meaning origin was included. Weight for origins are NOT calculated, and will return 0.")
             else:
                 w[i] = 1/r**2  # weigth is 1 over distance from 0 squared.
 
@@ -123,7 +122,6 @@ def Laplacian(points):
                 pos += 1
 
         hashtable[hashval] = weights
-
     return weights
 
 
@@ -131,41 +129,44 @@ def Laplacian(points):
 
 
 if __name__ == "__main__":
-    points = np.array([[0,0,0],
-    [2,0,0],
-    [0,2,0],
-    [0,0,2],
-    [-2,0,0],
-    [0,-2,0],
-    [0,0,-2],
-    [1,1,0],
-    [1,0,1],
-    [0,1,1],
-    [-1,-1,0],
-    [-1,0,-1],
-    [0,-1,-1],
-    [-1,1,0],
-    [1,-1,0],
-    [-1,0,1],
-    [1,0,-1],
-    [0,-1,1],
-    [0,1,-1]])
+    # points = np.array([[0,0,0],
+    # [2,0,0],
+    # [0,2,0],
+    # [0,0,2],
+    # [-2,0,0],
+    # [0,-2,0],
+    # [0,0,-2],
+    # [1,1,0],
+    # [1,0,1],
+    # [0,1,1],
+    # [-1,-1,0],
+    # [-1,0,-1],
+    # [0,-1,-1],
+    # [-1,1,0],
+    # [1,-1,0],
+    # [-1,0,1],
+    # [1,0,-1],
+    # [0,-1,1],
+    # [0,1,-1]])
 
-    test = Laplacian(points)
-
-    print(test)
     
-    # points_27 = np.array([[i,j,k] for i in range(-1,2) for j in range(-1,2) for k in range(-1,2)])
-
-    # points = points_27.copy()
-    # points[1,:] -= 3
-    # points[:,2] += 5
-
-    # np.random.seed(42)
-    # points = np.random.randint(-3, 4, (27, 3))
-    # print(points)
+    points_27 = np.array([[i,j,k] for i in range(-1,2) for j in range(-1,2) for k in range(-1,2)])
 
 
+    test = Laplacian(points_27)
+
+
+    N = 60
+    L = 25
+
+    dx = float(L)/N
+    hc = 197.327 # MeV_fm
+    rest_energy = 469.4592 # MeV / c^2
+    T_factor = hc**2/(2*rest_energy) * 1/dx**2
+    print(T_factor)
+
+    for i in range(27):
+        print(points_27[i], test[i])
 
     """
     hashKen = []
