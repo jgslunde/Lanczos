@@ -273,12 +273,11 @@ class IrrGrid:
             box = self.BoxList[i]
             for j in range(27):
                 disp = displacements[j]
-                if (disp != 0).any():
-                    neighbor_idx = self.FindRelativeIndex(i, box_depth, disp)
-                    box.neighbors.append(neighbor_idx)
-                    box.neighbor_displacements.append(disp)
-                    # box.neighbor_disp_dict[j] = disp.tobytes()
-                    box.neighbor_disp_dict_reversed[disp.tobytes()] = neighbor_idx
+                neighbor_idx = self.FindRelativeIndex(i, box_depth, disp)
+                box.neighbors.append(neighbor_idx)
+                box.neighbor_displacements.append(disp)
+                # box.neighbor_disp_dict[j] = disp.tobytes()
+                box.neighbor_disp_dict_reversed[disp.tobytes()] = neighbor_idx
 
 
 
