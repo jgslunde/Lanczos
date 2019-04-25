@@ -4,7 +4,7 @@ import math as m
 import time
 from tqdm import trange
 from itertools import product
-from tools import unravel_ijk, ravel_idx, get_displacement_stencil
+from tools import unravel_ijk, ravel_idx, get_displacement_stencil, get_symetric_displacement_stencil
 from symetry import FindMirrorSymetricPoints
 from Potentials import Deuterium3DPotential
 
@@ -37,6 +37,24 @@ class IrrGrid:
             self.neighbor_disp_dict = {}
             self.neighbor_disp_dict_reversed = {}
 
+        def get_points_in_cube(self, searchcube):
+            # From [d,2] array searchcube representing the outer edges of a cube in local fine-grid units, return the index of all gridpoints inside.
+            d = searchcube.shape[0]
+            searchcube_l = searchcube//self.a   # Establish a search cube in local grid coordinates by dividing by the grid spacing.
+            searchcube_l[:,0] += searchcube[:,0]%self.a != 0   # The upper limits were correctly rounded down, but the lower ones are supposed to be rouneded up,
+                                                          # so we add +1 if they were in fact rounded down.
+            idxs = []
+            for i in range(searchcube_l[0,0], searchcube_l[0,1]+1):
+                for j in range(searchcube_l[1,0], searchcube_l[1,1]+1):
+                    for k in range(searchcube_l[2,0], searchcube_l[2,1]+1):
+                       idxs.append(unravel_ijk(i, j, k, self.n) + self.idx_start)
+            return idxs
+            # nr_points = np.prod(searchcube[:,1] - searchcube[:,0])
+            # grid_coord = np.zeros(d, dtype=int)
+            # for i in range(nr_points):
+            #     for j in range(d):
+            #         grid_coord[j] = 
+
 
 
     def __init__(self, N, L, d=3):
@@ -46,8 +64,83 @@ class IrrGrid:
         self.potential_center = L/2.0
 
 
+    def GetNearbyPoints(self, idx, D, only_symetric=True):
+        # Return the indexes and relative positions of the points within a distance D*a of idx, where a is chosen as the largest local grid spacing.
+        # Return the indexes and relative positions to the points within a grid distance D of idx point (in units of a, the local box grid size).
+        if idx == 104041:
+            print()
+        box_nr = self.get_box_nr_from_idx[idx]
+        box = self.BoxList[box_nr]
+        a = box.a
+        disp = get_symetric_displacement_stencil(D, 3)
+        coord = box.point_coords_local[idx-box.idx_start]  # Note that these coords are not in units of local grid spacing a, not s.
+        coord_global = self.point_coords[idx]
+        coords = coord + disp
 
-    def GetNearbyPoints(self, idx, D):
+        if not self.IsCloseToEdge(idx, D):  # If nearby points will only include points in current box, stuffs gets easy.
+            idxs = unravel_ijk(*coords.T, box.n) + box.idx_start
+
+        elif not self.IsCloseToEdgeWithDifferentSpacing(idx, D):  # If nearby points crosses into one or more other boxes, but they have identical spacing.
+            idxs = np.zeros((1+2*D)**3, dtype=int)-1
+            neighbor_disp = (coords > box.n-1).astype(int) - (coords < 0).astype(int)
+
+            for i in range(disp.shape[0]):
+                if (neighbor_disp[i] == 0).all(): # If this point is in our box.
+                    idxs[i] = unravel_ijk(*coords[i], box.n) + box.idx_start
+                else:
+                    neighbor_box_nr = box.neighbor_disp_dict_reversed[neighbor_disp[i].tobytes()]
+                    neighbor_box = self.BoxList[neighbor_box_nr]
+                    neighbor_coord = coords[i].copy() - neighbor_disp[i]*box.n
+                    neighbor_coord = (neighbor_coord*box.a)//neighbor_box.a
+                    idxs[i] = unravel_ijk(*neighbor_coord, neighbor_box.n) + neighbor_box.idx_start
+
+        else:
+            idxs = []
+            neighbor_disp = (coords > box.n-1).astype(int) - (coords < 0).astype(int)
+            unique_neighbor_disp = np.unique(neighbor_disp, axis=0)
+
+            # FINDING BIGGEST LOCAL a:
+            local_a = box.a
+            for i in range(len(unique_neighbor_disp)):
+                neighbor_box_nr = box.neighbor_disp_dict_reversed[unique_neighbor_disp[i].tobytes()]
+                if self.BoxList[neighbor_box_nr].a > local_a:  # If we find another box with higher a, that is the new local a.
+                    local_a = self.BoxList[neighbor_box_nr].a
+
+            disp = (disp*local_a)//box.a
+            coords = coord + disp
+            neighbor_disp = (coords > box.n-1).astype(int) - (coords < 0).astype(int)
+            unique_neighbor_disp = np.unique(neighbor_disp, axis=0)
+
+            # SEARCHING FOR ALL POINTS WITHIN SET GRID SPACING
+            searchcube = np.repeat([[-1,1]], 3, axis=0)*local_a*D + coord[:,None]*box.a
+            idxs = []
+            for i in range(len(unique_neighbor_disp)):
+                neighbor_box_nr = box.neighbor_disp_dict_reversed[unique_neighbor_disp[i].tobytes()]
+                current_box = self.BoxList[neighbor_box_nr]
+                current_searchcube = searchcube - unique_neighbor_disp[i][:,None]*box.N
+                current_searchcube.clip(min=0, max=current_box.N-1, out=current_searchcube)
+                idxs_in_box = current_box.get_points_in_cube(current_searchcube)
+                idxs.extend(idxs_in_box)
+
+            # FINALLY, REMOVE POINTS THAT ARE NOT MIRROR-SYMETRIC ABOUT THE CENTER COORD.
+            # Obs: Now dealing only in fine-grid coords. This is very easy to fuck up.
+            if only_symetric:
+                cut_idxs = np.ones(len(idxs), dtype=bool)
+                for i in range(len(idxs)):
+                    current_coord = self.point_coords[idxs[i]]
+                    mirror_coord = coord_global - (current_coord - coord_global)
+                    neighbor_disp = (mirror_coord-box.corner_coord > box.N-1).astype(int) - (mirror_coord-box.corner_coord < 0).astype(int)
+                    neighbor_box_nr = box.neighbor_disp_dict_reversed[neighbor_disp.tobytes()]
+                    neighbor_box = self.BoxList[neighbor_box_nr]
+                    if (mirror_coord%neighbor_box.a != 0).any():
+                        cut_idxs[i] = False
+                idxs = np.array(idxs)[cut_idxs]
+        return np.array(idxs)
+
+
+
+
+    def GetNearbyPointsOld(self, idx, D):
         # Return the indexes and relative positions to the points within a grid distance D of idx point (in units of a, the local box grid size).
         box_nr = self.get_box_nr_from_idx[idx]
         box = self.BoxList[box_nr]
@@ -142,9 +235,6 @@ class IrrGrid:
         disp = displacements3D.copy()*D
         neighbor_disp = (coords + disp > box.n-1).astype(int) - (coords + disp < 0).astype(int)
         neighbor_disp = np.unique(neighbor_disp, axis=0)
-        print(neighbor_disp)
-        print(self.point_coords[idx], box.N)
-
         for x in neighbor_disp:
             if (x != 0).any():
                 neighbor_nr = box.neighbor_disp_dict_reversed[x.tobytes()]
@@ -158,7 +248,6 @@ class IrrGrid:
         box_nr = self.get_box_nr_from_idx[idx]
         box = self.BoxList[box_nr]
         i0, j0, k0 = ravel_idx(idx - box.idx_start, box.n)  # Calculate the "internal" i,j,k, where 0,0,0 corresponds to box corner.
-        print(box_nr, idx, box.idx_start)
         points = np.empty(27, dtype=int)
         points[:] = np.nan
 
@@ -238,6 +327,9 @@ class IrrGrid:
         self.aList = 2**np.ceil(np.log(a_factor)/np.log(2))
         self.aList = np.array([min(int(x), self.N_per_box//8) for x in self.aList])
         # self.aList = np.array([round(x) for x in a_factor], dtype=int)
+
+        self.aList[:] = 2
+        self.aList[13] = 1
         for i in range(nr_boxes):
             print(i, self.aList[i])
         print(f"+++ Grid density calculation finished. Density ranges from {np.min(self.aList)} to {np.max(self.aList)}")
@@ -307,64 +399,17 @@ class IrrGrid:
 
 
 
-def PlotStuff():
-    N = 60
-    L = 25
-    box_depth = 3
-    grid = IrrGrid(N, L)
-    grid.SetupBoxes(box_depth=box_depth)
-
-
-    idx = 2334
-    center_coord = grid.point_coords[idx]
-    print("COORDS:", center_coord)
-    print(grid.IsCloseToEdge(idx, 1))
-    print()
-    t0 = time.time()
-    neighbor_depth = 3
-    neighbors_idxs = grid.GetNearbyPoints(idx, neighbor_depth)
-    print(time.time() - t0)
-    neighbors = grid.point_coords[neighbors_idxs]
-
-    asdf = FindMirrorSymetricPoints(neighbors-center_coord)
-    print(len(neighbors))
-    print(len(asdf))
-
-    print(neighbors)
-    neighbors2D = neighbors[:,:2]
-    fig, ax = plt.subplots(3,3, figsize=(20,20))
-    for i in range(-neighbor_depth, neighbor_depth + 1):
-        k = i + neighbor_depth
-        z = center_coord[2] + int(i)
-        print(z)
-        for j in range(neighbors.shape[0]):
-            if neighbors[j,2] == z:
-                ax[k//3, k%3].scatter(*neighbors[j,:2], c="b")
-                ax[k//3, k%3].set_title(f"Z = {z}")
-                ax[k//3, k%3].set_xlim(center_coord[0]-neighbor_depth*2, center_coord[0]+neighbor_depth*2)
-                ax[k//3, k%3].set_ylim(center_coord[1]-neighbor_depth*2, center_coord[1]+neighbor_depth*2)
-        if i == 0:
-            ax[k//3, k%3].scatter(*center_coord[:2], c="r")
-        # plt.axhline(y=x*N//box_depth-0.5, ls="--", c="y")
-        # plt.axvline(x=x*N//box_depth-0.5, ls="--", c="y")
-    plt.show()
-
-
-
-
-
-
 if __name__ == "__main__":
-    N = 60
+    N = 120
     L = 25
     box_depth = 3
     grid = IrrGrid(N, L)
     grid.SetupBoxes(box_depth=box_depth)
-    idx = 14216
+    idx = 105719
     print(grid.BoxList[13].idx_start)
     center_coord = grid.point_coords[idx]
     print("COORDS:", center_coord)
-    print(grid.IsCloseToEdgeWithDifferentSpacing(idx, 1))
+    print(grid.IsCloseToEdgeWithDifferentSpacing(idx, 2))
     print()
     t0 = time.time()
     neighbor_depth = 1
@@ -374,10 +419,18 @@ if __name__ == "__main__":
     print(neighbors)
 
 
-
-
-
-
+    fig, ax = plt.subplots(3, 3, figsize=(16,16))
+    for j in range(9):
+        z = center_coord[2]-4+j
+        k, l = j//3, j%3
+        for i in range(neighbors.shape[0]):
+            if neighbors[i,2] == z:
+                ax[k,l].scatter(neighbors[i,0], neighbors[i,1], c="navy")
+            ax[k,l].set_title(z)
+    ax[1,1].axhline(y=center_coord[1], ls="--")
+    ax[1,1].axvline(x=center_coord[0], ls="--")
+    plt.tight_layout()
+    plt.show()
 
 
 
