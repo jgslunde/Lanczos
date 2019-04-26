@@ -8,18 +8,21 @@ from tools import get_relative_positions
 
 class Hamiltonian:
     """ Class for setting up Hamiltonian. """
-    def __init__(self, Grid, Potential, T_factor):
+    def __init__(self, Grid, Potential, T_factor, normal_eq=False):
         self.Grid = Grid
         self.N = Grid.N
         self.L = Grid.L # Length of system in fm.
         self.Potential = Potential
         self.T_factor = T_factor
+        self.normal_eq = normal_eq
 
 
     def MakeSparseH(self):
         self.MakeSparseV()
         self.MakeSparseT()
         self.H_sparse = (-self.T_sparse + self.V_sparse)
+        if self.normal_eq:
+            self.H_sparse = self.H_sparse.transpose()*self.H_sparse
 
 
     def MakeSparseV(self):
@@ -46,7 +49,7 @@ class Hamiltonian:
             row_ind = []; col_ind = []; data = []
             for idx in trange(Grid.nr_points):
                 point = Grid.point_coords[idx]
-                neighbor_idxs = Grid.GetNearbyPoints(idx, 2)
+                neighbor_idxs = Grid.GetNearbyPoints(idx, 1)
                 neighbor_idxs = neighbor_idxs[neighbor_idxs != idx]  # Remove self from neighbors.
                 if len(neighbor_idxs) < 26:
                     print(f"WARNING: Only {len(neighbor_idxs)} neighbors found when constructing Laplacian for idx {idx}.")
@@ -66,7 +69,7 @@ class Hamiltonian:
                 for i in range(len(neighbor_idxs)):
                     row_ind.append(idx)
                     col_ind.append(neighbor_idxs[i])
-                    data.append(T_factor*weights[i]*2)
+                    data.append(T_factor*weights[i])
             self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
             scipy.sparse.save_npz(f"T_matrices/{filename}.npz", self.T_sparse)
 
