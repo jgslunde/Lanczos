@@ -1,4 +1,5 @@
 import numpy as np
+import math as m
 import scipy.sparse.linalg
 import matplotlib.pyplot as plt
 import cupy as cp
@@ -33,17 +34,36 @@ class IrrLanczos:
             return self._H_eff
 
     @property
-    def V(self):
+    def V1(self):
         if not self.Lanczos_has_been_executed:
             raise ValueError("Lanczos Algorithm has not been called.")
         else:
-            return self._V
+            return self._V1
+
+    @property
+    def V2(self):
+        if not self.Lanczos_has_been_executed:
+            raise ValueError("Lanczos Algorithm has not been called.")
+        else:
+            return self._V2
 
     @property
     def H_eigvecs(self):
         if not self.H_eigs_have_been_found:
             self.get_H_eigs()
         return self._H_eigvecs
+
+    @property
+    def H_eigvecs1(self):
+        if not self.H_eigs_have_been_found:
+            self.get_H_eigs()
+        return self._H_eigvecs1
+
+    @property
+    def H_eigvecs2(self):
+        if not self.H_eigs_have_been_found:
+            self.get_H_eigs()
+        return self._H_eigvecs2
 
     @property
     def H_eigvals(self):
@@ -107,42 +127,55 @@ class IrrLanczos:
         V2[0] = v0
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
-
+        gamma = np.zeros(n-1)
+        w = np.zeros(n)
         r = H*V1[0]
         s = HT*V2[0]
 
-        for j in tqdm(range(0, n)):
+        for j in tqdm(range(0, n-1)):
             alpha[j] = np.dot(V1[j], r)
             r = r - alpha[j]*V1[j]
-
-            beta[j-1] = np.linalg.norm(r)
-            V[j] = r/beta[j-1]
+            s = s - alpha[j]*V2[j]
+            w[j] = np.dot(r, s)
+            # print(w[j])
+            beta[j] = m.sqrt(w[j])
+            gamma[j] = w[j]/beta[j]
+            V1[j+1] = r/beta[j]
+            V2[j+1] = s/gamma[j]
             # REORTHOGONALIZATION:
-            self.reorthogonalize(V, j, use_cuda=use_cuda)
-            r = HT*(H*V[j])
-            # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
-            alpha[j] = np.dot(V[j], r)
-            r = r - V[j]*alpha[j] - V[j-1]*beta[j-1]
+            # self.bireorthogonalize(V1, V2, j, use_cuda=use_cuda)
+            # print("ASDFASDF ", np.linalg.norm(V1[j]), np.linalg.norm(V2[j]))
+            asdf = 0
+            # for i in range(j):
+            #     asdf += np.dot(V1[:5], V1[j].T)
+            # print(asdf)
+
+            r = H*V1[j+1]
+            s = HT*V2[j+1]
+            r = r - V1[j]*gamma[j]
+            s = s - V2[j]*beta[j]
+        alpha[n-1] = np.dot(V1[n-1], r)
 
         # Creating H_eff
         H_eff = np.zeros((n, n))
         H_eff[0,0] = alpha[0]
-        H_eff[0,1] = beta[0]
+        H_eff[0,1] = gamma[0]
         H_eff[-1,-2] = beta[-1]
         H_eff[-1,-1] = alpha[-1]
         for i in tqdm(range(1, n-1)):
             H_eff[i,i-1] = beta[i-1]
             H_eff[i,i] = alpha[i]
-            H_eff[i,i+1] = beta[i]
+            H_eff[i,i+1] = gamma[i-1]
 
         if use_cuda:
             # If having used cuda, convert H_eff and V to numpy objects, and H to scipy.sparse.
             import numpy as np
             self._H_eff = cp.asnumpy(H_eff)
-            self._V = cp.asnumpy(V.T)
+            self._V1 = cp.asnumpy(V1.T)
+            self._V2 = cp.asnumpy(V2.T)
             self.H = H.get()
         else:
-            self._H_eff, self._V = H_eff, V.T
+            self._H_eff, self._V1, self.V2 = H_eff, V1.T, V2.T
         print("+++ Lanczos executed successfully.")
         self.Lanczos_has_been_executed = True
 
@@ -183,6 +216,7 @@ class IrrLanczos:
         alpha = np.zeros(n)
         beta = np.zeros(n-1)
         r = H*V[0]
+        # r = HT*r
         alpha[0] = np.dot(r, V[0])
         r = r - alpha[0]*V[0] 
         for j in tqdm(range(0, n)):
@@ -191,6 +225,7 @@ class IrrLanczos:
             # REORTHOGONALIZATION:
             self.reorthogonalize(V, j, use_cuda=use_cuda)
             r = H*V[j]
+            # r = HT*r
             # r = r - V[:,j-1]*beta[j-1]  # Alternative to doing this below. TODO: check.
             alpha[j] = np.dot(V[j], r)
             r = r - V[j]*alpha[j] - V[j-1]*beta[j-1]
@@ -219,12 +254,12 @@ class IrrLanczos:
 
 
 
-    def get_H_eigs(self):
+    def get_H_eigsOld(self):
         if not self.Lanczos_has_been_executed:
             raise ValueError("Lanczos Algorithm has not been called.")
 
         print("+++ Converting eigenvectors from H_eff to H basis.")
-        M, n, V = self.M, self.n, self.V
+        M, n, V = self.M, self.n, self._V
         H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)
         
         # Transforming H_eff eigvecs to H eigvecs:
@@ -240,7 +275,34 @@ class IrrLanczos:
         self.H_eigs_have_been_found = True
 
 
-    def print_good_eigs(self, tol=0.01, print_nr=20, print_bad=True):
+    def get_H_eigs(self):
+        if not self.Lanczos_has_been_executed:
+            raise ValueError("Lanczos Algorithm has not been called.")
+
+        print("+++ Converting eigenvectors from H_eff to H basis.")
+        M, n, V1, V2 = self.M, self.n, self.V1, self.V2
+        H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)
+        
+        # Transforming H_eff eigvecs to H eigvecs:
+        H_eigvecs_lanczos1 = np.zeros((M, n))
+        H_eigvecs_lanczos2 = np.zeros((M, n))
+        for i in range(n):
+            H_eigvecs_lanczos1[:,i] = np.dot(V1, H_eff_eigvecs[:,i])
+            H_eigvecs_lanczos2[:,i] = np.dot(V2, H_eff_eigvecs[:,i])
+        self.test_is_normalized(H_eigvecs_lanczos1, tol=0.001)
+        self.test_is_normalized(H_eigvecs_lanczos2, tol=0.001)
+        self.test_is_orthogonal(H_eigvecs_lanczos1, tol=0.01)
+        self.test_is_orthogonal(H_eigvecs_lanczos2, tol=0.01)
+        
+        
+        self._H_eigvals = H_eff_eigvals
+        self._H_eigvecs1 = H_eigvecs_lanczos1
+        self._H_eigvecs2 = H_eigvecs_lanczos2
+        print("+++ Finished Converting.")
+        self.H_eigs_have_been_found = True
+
+
+    def print_good_eigsOld(self, tol=0.01, print_nr=20, print_bad=True, normal_eq=False):
         """ Prints out found H-eigs that actually match well, requiring Hx = hx => (Hx)/|Hx| = x within a tolerance."""
         H, eigvecs, eigvals = self.H, self.H_eigvecs, self.H_eigvals
         inner_prod = np.zeros(self.n)
@@ -251,6 +313,9 @@ class IrrLanczos:
             Hv = Hv/np.linalg.norm(Hv)
             inner_prod[i] = np.dot(Hv, eigvec)**2
 
+        if normal_eq:
+            eigvals = np.sqrt(eigvals)
+
         print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
         print("%12s %12s" % ("Eigval", "Eigvec InnerProd"))
         for i in range(print_nr):
@@ -259,6 +324,30 @@ class IrrLanczos:
             else:
                 print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
     
+
+    def print_good_eigs(self, tol=0.01, print_nr=20, print_bad=True, normal_eq=False):
+        """ Prints out found H-eigs that actually match well, requiring Hx = hx => (Hx)/|Hx| = x within a tolerance."""
+        H, eigvecs1, eigvecs2, eigvals = self.H, self.H_eigvecs1, self.H_eigvecs2, self.H_eigvals
+        inner_prod = np.zeros(self.n)
+        for i in range(self.n):
+            eigvec = eigvecs[:,i]
+            eigval = eigvals[i]
+            Hv = H*eigvec
+            Hv = Hv/np.linalg.norm(Hv)
+            inner_prod[i] = np.dot(Hv, eigvec)**2
+
+        if normal_eq:
+            eigvals = np.sqrt(eigvals)
+
+        print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
+        print("%12s %12s" % ("Eigval", "Eigvec InnerProd"))
+        for i in range(print_nr):
+            if abs(1 - inner_prod[i]) < tol:
+                print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
+            else:
+                print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
+
+
 
     def compare_eigs(self):
         """ Prints a nicely formated comparison of the actual and Lanczos-estimated eigenvalues and eigenvectors, matched after max inner product with actual eigenvectors. Note that this will only really work if H is small, and exact eigenvectors can be solved with numpy.
@@ -291,6 +380,28 @@ class IrrLanczos:
         perc_diff_eigval = abs((eigval_pairs[:,0] - eigval_pairs[:,1])/eigval_pairs[:,1])*100
 
 
+
+    @staticmethod
+    def bireorthogonalize(V1, V2, j, use_cuda=True):
+        if use_cuda:
+            if j != 0:
+                inner_prods_uv = cp.sum(V1[j,:]*V1[:j,:], axis=1)
+                inner_prods_uu = cp.sum(V1[:j,:]*V1[:j,:],axis=1)
+                V1[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V1[:j,:],axis=0)
+
+                inner_prods_uv = cp.sum(V1[j,:]*V2[:j,:], axis=1)
+                inner_prods_uu = cp.sum(V2[:j,:]*V2[:j,:],axis=1)
+                V1[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V2[:j,:],axis=0)
+
+                inner_prods_uv = cp.sum(V2[j,:]*V2[:j,:], axis=1)
+                inner_prods_uu = cp.sum(V2[:j,:]*V2[:j,:],axis=1)
+                V2[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V2[:j,:],axis=0)
+
+                inner_prods_uv = cp.sum(V2[j,:]*V1[:j,:], axis=1)
+                inner_prods_uu = cp.sum(V1[:j,:]*V1[:j,:],axis=1)
+                V2[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V1[:j,:],axis=0)
+        else:
+            raise NotImplementedError("sorry :)")
 
     @staticmethod
     def reorthogonalize(V, j, use_cuda=True):
