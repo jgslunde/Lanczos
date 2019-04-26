@@ -57,11 +57,12 @@ class IrrGrid:
 
 
 
-    def __init__(self, N, L, d=3):
+    def __init__(self, N, L, d=3, overwrite_spacing=False):
         self.N = N
         self.L = L
         self.s = L/(N-1) # Fine-grid distance is length of box divided by number of intervals, which is number of lattice points - 1.
         self.potential_center = L/2.0
+        self.overwrite_spacing = overwrite_spacing
 
 
     def GetNearbyPoints(self, idx, D, only_symetric=True):
@@ -328,8 +329,10 @@ class IrrGrid:
         self.aList = np.array([min(int(x), self.N_per_box//8) for x in self.aList])
         # self.aList = np.array([round(x) for x in a_factor], dtype=int)
 
-        self.aList[:] = 2
-        self.aList[13] = 1
+        if self.overwrite_spacing:
+            self.aList[:] = 1
+            if len(self.aList) > 13:
+                self.aList[13] = 1
         for i in range(nr_boxes):
             print(i, self.aList[i])
         print(f"+++ Grid density calculation finished. Density ranges from {np.min(self.aList)} to {np.max(self.aList)}")
