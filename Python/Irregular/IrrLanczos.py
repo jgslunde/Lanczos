@@ -406,11 +406,15 @@ class IrrLanczos:
     @staticmethod
     def reorthogonalize(V, j, use_cuda=True):
         """ Reorthogonalizes element number i in V matrix."""
+        # Notes. The commented out method should in theory be more optimal, as it only computes the part of the products actually used.
+        # However, it has memory stability issues.
         if use_cuda:
-            if j != 0:
-                inner_prods_uv = cp.sum(V[j,:]*V[:j,:], axis=1)
-                inner_prods_uu = cp.sum(V[:j,:]*V[:j,:],axis=1)
-                V[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V[:j,:],axis=0)
+            inner_prods = cp.sum(V[j]*V, axis=1)
+            V[j] = 2*V[j] - cp.sum(inner_prods[:,None]*V, axis=0)
+            # if j != 0:
+            #     inner_prods_uv = cp.sum(V[j,:]*V[:j,:], axis=1)
+            #     inner_prods_uu = cp.sum(V[:j,:]*V[:j,:],axis=1)
+            #     V[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V[:j,:],axis=0)
             # for i in range(j): # Old loop implementation
             #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
         else:
