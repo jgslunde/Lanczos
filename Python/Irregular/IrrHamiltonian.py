@@ -53,6 +53,10 @@ class Hamiltonian:
                 neighbor_idxs = neighbor_idxs[neighbor_idxs != idx]  # Remove self from neighbors.
                 if len(neighbor_idxs) < 26:
                     print(f"WARNING: Only {len(neighbor_idxs)} neighbors found when constructing Laplacian for idx {idx}.")
+                    print(f"Employing temp. solution to this problem: Expanding Search Radius by 1.")
+                    neighbor_idxs = Grid.GetNearbyPoints(idx, 2)
+                    neighbor_idxs = neighbor_idxs[neighbor_idxs != idx]  # Remove self from neighbors.
+
                 # print(neighbor_idxs)
                 # print(Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]])
                 # print(np.linalg.norm( Grid.GridCoords[np.argsort(np.linalg.norm(Grid.GridCoords - point, axis=1))[:10]] - point, axis=1))
