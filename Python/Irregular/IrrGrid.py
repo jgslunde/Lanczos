@@ -332,6 +332,7 @@ class IrrGrid:
         if self.overwrite_spacing:
             self.aList[:] = 1
             if len(self.aList) > 13:
+                self.aList[:] = 2
                 self.aList[13] = 1
         for i in range(nr_boxes):
             print(i, self.aList[i])
