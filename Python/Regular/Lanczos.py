@@ -83,11 +83,12 @@ class Lanczos:
         M = self.M
 
         if use_cuda:
-            import numpy as np
-            H = cupyx.scipy.sparse.csc_matrix(H,dtype=np.float64)
             import cupy as np
+            import numpy as npp
+            H = cupyx.scipy.sparse.csc_matrix(H, dtype=npp.float64)
         else:
             import numpy as np
+            import numpy as npp
 
         np.random.seed(seed)
 
@@ -177,9 +178,11 @@ class Lanczos:
         print("%12s %12s" % ("Eigval", "Eigvec InnerProd"))
         for i in range(print_nr):
             if abs(1 - inner_prod[i]) < tol:
-                print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
+                print("%12.4f %12.6f" % (eigvals[i], inner_prod[i]))
+                #print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
             else:
-                print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
+                print("%12.4f %12.6f --- BAD" % (eigvals[i], inner_prod[i]))
+                #print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
 
     
 
@@ -231,10 +234,12 @@ class Lanczos:
     def reorthogonalize(V, j, use_cuda=True):
         """ Reorthogonalizes element number i in V matrix."""
         if use_cuda:
-            if j != 0:
-                inner_prods_uv = cp.sum(V[j,:]*V[:j,:], axis=1)
-                inner_prods_uu = cp.sum(V[:j,:]*V[:j,:],axis=1)
-                V[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V[:j,:],axis=0)
+            inner_prods = cp.sum(V[j]*V, axis=1)
+            V[j] = 2*V[j] - cp.sum(inner_prods[:,None]*V, axis=0)
+            # if j != 0:
+            #     inner_prods_uv = cp.sum(V[j,:]*V[:j,:], axis=1)
+            #     inner_prods_uu = cp.sum(V[:j,:]*V[:j,:],axis=1)
+            #     V[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V[:j,:],axis=0)
             # for i in range(j): # Old loop implementation
             #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
         else:
@@ -305,9 +310,9 @@ class Lanczos:
                                 return the largest inner product between two vectors.
         """
         M = np.shape(V)[1]
-        test_matrix = np.abs(np.matrix(V).T * np.matrix(V) - np.eye(M))
+        test_matrix = np.abs(np.matrix(V).T * np.matrix(V) - np.eye(M)*np.linalg.norm(V, axis=0)**2)
         max_error_idx = np.unravel_index(np.argmax(test_matrix, axis=None), test_matrix.shape)
-        max_error = test_matrix[max_error_idx]
+        max_error = np.sqrt(test_matrix[max_error_idx])
         if no_assert:
             return max_error
         else:
