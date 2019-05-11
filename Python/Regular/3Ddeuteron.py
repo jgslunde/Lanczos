@@ -60,8 +60,8 @@ def potential(x, y, z):
     fPow = 4.0
     return eCores*np.exp(-(r/rCore)**fPow) - eWells*np.exp(-(r/rWell)**fPow)
 
+n = 200
 N = 30
-n = 260
 L = 25 # Length of system in fm.
 dx = float(L)/N
 
@@ -78,6 +78,7 @@ system.create_sparse_V()
 T_sparse = system.T_sparse
 V_sparse = system.V_sparse
 H = (-T_sparse + V_sparse)
+H.sort_indices()
 
 print("H MATRIX:")
 print(H)
@@ -91,9 +92,13 @@ print(T_sparse)
 
 # Running Lanczos
 TEST = Lanczos(H)
-TEST.execute_Lanczos(n, use_cuda=True)
+TEST.execute_Lanczos(n, use_cuda=False, seed=78)
 l_L, v_L = TEST.H_eigvals, TEST.H_eigvecs
 TEST.print_good_eigs()
+
+np.save("eigvals.npy", l_L)
+np.save("eigvecs.npy", v_L)
+
 
 # Comparing to analytical results.
 # TEST.compare_eigs()

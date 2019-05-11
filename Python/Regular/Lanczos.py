@@ -85,7 +85,7 @@ class Lanczos:
         if use_cuda:
             import cupy as np
             import numpy as npp
-            H = cupyx.scipy.sparse.csc_matrix(H, dtype=npp.float64)
+            H = cupyx.scipy.sparse.csr_matrix(H, dtype=npp.float64)
         else:
             import numpy as np
             import numpy as npp
@@ -235,7 +235,8 @@ class Lanczos:
         """ Reorthogonalizes element number i in V matrix."""
         if use_cuda:
             inner_prods = cp.sum(V[j]*V, axis=1)
-            V[j] = 2*V[j] - cp.sum(inner_prods[:,None]*V, axis=0)
+            inner_prods[j] = 0
+            V[j] = V[j] - cp.sum(inner_prods[:,None]*V, axis=0)
             # if j != 0:
             #     inner_prods_uv = cp.sum(V[j,:]*V[:j,:], axis=1)
             #     inner_prods_uu = cp.sum(V[:j,:]*V[:j,:],axis=1)
@@ -244,7 +245,8 @@ class Lanczos:
             #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
         else:
             inner_prods = np.sum(V[j]*V, axis=1)
-            V[j] = 2*V[j] - np.sum(inner_prods[:,None]*V, axis=0)
+            inner_prods[j] = 0
+            V[j] = V[j] - np.sum(inner_prods[:,None]*V, axis=0)
             # for i in range(j):
                 # V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
 
