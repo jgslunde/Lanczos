@@ -60,8 +60,8 @@ def potential(x, y, z):
     fPow = 4.0
     return eCores*np.exp(-(r/rCore)**fPow) - eWells*np.exp(-(r/rWell)**fPow)
 
-n = 200
-N = 30
+n = 400
+N = 160
 L = 25 # Length of system in fm.
 dx = float(L)/N
 
