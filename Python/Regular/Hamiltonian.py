@@ -42,31 +42,31 @@ class Hamiltonian:
                     idx = self.unravel_xyz(i, j, k)
                     row_ind.append(idx); col_ind.append(idx)
                     data.append(self.potential(self.x[i], self.y[j], self.z[k]))
-        self.V_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
+        self.V_sparse = scipy.sparse.csr_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
 
 
     def create_sparse_T(self, points="27"):
         print("+++ Setting up sparse laplacian matrix T.")
-        # filename = f"T_N={self.N}_Laplace={points}"
-        # if os.path.isfile(f"T_matrices/{filename}.npz"):
-        #     print(f"+++ Laplacian matrix T for N = {self.N} and {points} points already created. Extracting...")
-        #     self.T_sparse = scipy.sparse.load_npz(f"T_matrices/{filename}.npz")
-        # else:
-        print("+++ Laplacian matrix T for N = %d and %s does not exist. Creating..." % (self.N, points))
-        if points == "7":
-            Laplacian = self.Laplacian_7point
-        elif points =="27":
-            Laplacian = self.Laplacian_27point
-        T_factor, N = self.T_factor, self.N
-        row_ind = []; col_ind = []; data = []
-        for i in tqdm(range(N**3)):
-            neighbors, weights = Laplacian(i)
-            for j, neighbor in enumerate(neighbors):
-                row_ind.append(i)
-                col_ind.append(neighbor)
-                data.append(T_factor*weights[j])
-        self.T_sparse = scipy.sparse.csc_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
-        # scipy.sparse.save_npz(f"T_matrices/{filename}.npz", self.T_sparse)
+        filename = "T_N=%d_Laplace=%s" % (self.N, points)
+        if os.path.isfile("T_matrices/%s.npz" % filename):
+            print("+++ Laplacian matrix T for N = %d and %s points already created. Extracting..." % (self.N, points))
+            self.T_sparse = scipy.sparse.load_npz("T_matrices/%s.npz" % filename)
+        else:
+            print("+++ Laplacian matrix T for N = %d and %s does not exist. Creating..." % (self.N, points))
+            if points == "7":
+                Laplacian = self.Laplacian_7point
+            elif points =="27":
+                Laplacian = self.Laplacian_27point
+            T_factor, N = self.T_factor, self.N
+            row_ind = []; col_ind = []; data = []
+            for i in tqdm(range(N**3)):
+                neighbors, weights = Laplacian(i)
+                for j, neighbor in enumerate(neighbors):
+                    row_ind.append(i)
+                    col_ind.append(neighbor)
+                    data.append(T_factor*weights[j])
+            self.T_sparse = scipy.sparse.csr_matrix((data, (row_ind, col_ind)), shape=(N**3,N**3))
+            scipy.sparse.save_npz("T_matrices/%s.npz" % filename, self.T_sparse)
 
 
 
