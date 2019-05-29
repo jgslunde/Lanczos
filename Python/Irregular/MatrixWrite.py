@@ -57,6 +57,6 @@ temp1 = np.repeat("{", l)
 temp2 = np.repeat(", ", l)
 temp3 = np.repeat("},\n", l)
 string += "".join(temp1 + row + temp2 + col + temp2 + data + temp3)
-string += "};"
+string += "}};"
 with open(f"matrix_d={d}_N={N}_L={L}_p={p}.dat", "w") as outfile:
     outfile.write(string)
