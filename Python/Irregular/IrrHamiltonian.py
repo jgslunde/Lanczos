@@ -3,7 +3,6 @@ import scipy.sparse
 import os
 from tqdm import trange
 from IrrLap import Laplacian
-from symetry import FindMirrorSymetricPoints
 from tools import get_relative_positions
 
 class Hamiltonian:
