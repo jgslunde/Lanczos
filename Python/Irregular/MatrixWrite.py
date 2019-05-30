@@ -35,10 +35,10 @@ def MatrixWrite(d, L, N, p):
 
     ### Wiring to file ###
     string = f"""numd = {d:d};
-    box = {{{L:g}, {L:g}, {L:g}}};
-    potential = \"{p}\";
-    H = {{{{{N**3:d}, {N**3:d}}}, {{
-    """
+nrpoints = {Ham.H_sparse.count_nonzero():d};
+box = {{{L:g}, {L:g}, {L:g}}};
+potential = \"{p}\";
+H = {{{{{N**3:d}, {N**3:d}}}, {{"""
 
     H = sparse.coo_matrix(Ham.H_sparse)
     row, col, data = H.row, H.col, H.data
