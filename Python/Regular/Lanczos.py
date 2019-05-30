@@ -178,10 +178,10 @@ class Lanczos:
         print("%12s %12s" % ("Eigval", "Eigvec InnerProd"))
         for i in range(print_nr):
             if abs(1 - inner_prod[i]) < tol:
-                print("%12.4f %12.6f" % (eigvals[i], inner_prod[i]))
+                print("%12.4f %20.14f" % (eigvals[i], inner_prod[i]))
                 #print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
             else:
-                print("%12.4f %12.6f --- BAD" % (eigvals[i], inner_prod[i]))
+                print("%12.4f %20.14f --- BAD" % (eigvals[i], inner_prod[i]))
                 #print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
 
     
@@ -245,10 +245,10 @@ class Lanczos:
             #     V[:,j] = V[:,j] - cp.dot(V[:,i], V[:,j])*V[:,i]
         else:
             inner_prods = np.sum(V[j]*V, axis=1)
-            inner_prods[j] = 0
-            V[j] = V[j] - np.sum(inner_prods[:,None]*V, axis=0)
+            # inner_prods[j] = 0
+            V[j] = 2*V[j] - np.sum(inner_prods[:,None]*V, axis=0)
             # for i in range(j):
-                # V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
+            #     V[:,j] = V[:,j] - np.dot(V[:,i], V[:,j])*V[:,i]
 
     @staticmethod
     def get_matched_eigs(v, vL, l, lL):
