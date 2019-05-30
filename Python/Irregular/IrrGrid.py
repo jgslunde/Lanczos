@@ -5,7 +5,6 @@ import time
 from tqdm import trange
 from itertools import product
 from tools import unravel_ijk, ravel_idx, get_displacement_stencil, get_symetric_displacement_stencil
-from symetry import FindMirrorSymetricPoints
 from Potentials import Deuterium3DPotential
 
 # Pre-calculate every possible neighboring displacement in 3 or 6 dimensions.
@@ -145,7 +144,6 @@ class IrrGrid:
         # Return the indexes and relative positions to the points within a grid distance D of idx point (in units of a, the local box grid size).
         box_nr = self.get_box_nr_from_idx[idx]
         box = self.BoxList[box_nr]
-        a = box.a
 
         if D == 1:
             disp = displacements3D
