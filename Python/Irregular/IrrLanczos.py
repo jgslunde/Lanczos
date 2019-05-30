@@ -34,18 +34,11 @@ class IrrLanczos:
             return self._H_eff
 
     @property
-    def V1(self):
+    def V(self):
         if not self.Lanczos_has_been_executed:
             raise ValueError("Lanczos Algorithm has not been called.")
         else:
-            return self._V1
-
-    @property
-    def V2(self):
-        if not self.Lanczos_has_been_executed:
-            raise ValueError("Lanczos Algorithm has not been called.")
-        else:
-            return self._V2
+            return self._V
 
     @property
     def H_eigvecs(self):
@@ -53,17 +46,6 @@ class IrrLanczos:
             self.get_H_eigs()
         return self._H_eigvecs
 
-    @property
-    def H_eigvecs1(self):
-        if not self.H_eigs_have_been_found:
-            self.get_H_eigs()
-        return self._H_eigvecs1
-
-    @property
-    def H_eigvecs2(self):
-        if not self.H_eigs_have_been_found:
-            self.get_H_eigs()
-        return self._H_eigvecs2
 
     @property
     def H_eigvals(self):
@@ -92,69 +74,93 @@ class IrrLanczos:
 
 
 
-    def execute_Lanczos(self, n, seed=99, use_cuda=True, v0=None):
+    def execute_Lanczos(self, n, seed=99, use_cuda=True, v0=None, dtype=np.float64):
         if n > self.M:
             raise ValueError("n cannot be larger than M!")
+        assert self.H.shape[0] == self.H.shape[1]
 
         print("+++ Executing Lanczos algorithm")
         self.n = n
-
         H = self.H
         M = self.M
 
         if use_cuda:
-            import numpy as np
-            H = cupyx.scipy.sparse.csc_matrix(H, dtype=np.float64)
+            import numpy as npp
             import cupy as np
+            H = cupyx.scipy.sparse.csr_matrix(H, dtype=dtype)
+            HT = cupyx.scipy.sparse.csr_matrix(H.transpose(), dtype=dtype)
         else:
             import numpy as np
-
+            import numpy as npp
+            H = scipy.sparse.csr_matrix(H, dtype=dtype)
+            HT = scipy.sparse.csr_matrix(H.transpose(), dtype=dtype)
         np.random.seed(seed)
-        HT = np.transpose(H)
 
         # Random normalized start vector v0 of size N.
         if v0 is None:
             v0 = np.random.uniform(-1, 1, size=(M))
+            v1 = np.random.uniform(-1, 1, size=(M))
         else:
             v0 = np.array(v0)
-        v0 = v0/np.linalg.norm(v0)
-
+        # v0 = v0/np.linalg.norm(v0)
+        dot = np.sqrt(np.abs(np.dot(v0, v1)))
+        v0 = v0/dot
+        v1 = v1/dot*np.sign(np.dot(v0, v1))
+        print(np.dot(v0, v1))
         # Lanczos Algorithm
         # NOTE: the v-vectors in V are ROW VECTORS within this function, for cache reasons, and is transposed to COLUMN VECTORS upon finishing.
-        V1 = np.zeros((n, M))  # Matrix of the n generated orthogonal v-vectors. 
-        V1[0] = v0
-        V2 = np.zeros((n, M))
-        V2[0] = v0
-        alpha = np.zeros(n)
-        beta = np.zeros(n-1)
-        gamma = np.zeros(n-1)
-        w = np.zeros(n)
-        r = H*V1[0]
-        s = HT*V2[0]
-
-        for j in tqdm(range(0, n-1)):
-            alpha[j] = np.dot(V1[j], r)
-            r = r - alpha[j]*V1[j]
-            s = s - alpha[j]*V2[j]
+        print(f"    r1     |     r2     |     r3     |     s1     |     s2     |     s3     |   alpha    |      w     |    beta    |    gamma   |  alphadiff |")
+        q = np.zeros((n, M), dtype=dtype)
+        q[0] = v0
+        q_basis = q.copy()
+        q_basis[0] = q_basis[0]/np.linalg.norm(q_basis[0])
+        p = np.zeros((n, M), dtype=dtype)
+        p[0] = v1
+        p_basis = p.copy()
+        p_basis[0] = p_basis[0]/np.linalg.norm(p_basis[0])
+        alpha = np.zeros(n, dtype=dtype)
+        beta = np.zeros(n-1, dtype=dtype)
+        gamma = np.zeros(n-1, dtype=dtype)
+        w = np.zeros(n, dtype=dtype)
+        for j in range(0, n-1):
+            r = H*q[j]
+            s = HT*p[j]
+            r1 = r.copy()
+            s1 = s.copy()
+            r = r - gamma[j-1]*q[j-1]
+            s = s - beta[j-1]*p[j-1]
+            r2 = r.copy()
+            s2 = s.copy()
+            alpha[j] = (np.dot(p[j], r) + np.dot(q[j], s)) / 2
+            # assert np.abs(alpha[j] - np.dot(q[j], s)) < 1e-6
+            r = r - alpha[j]*q[j]
+            s = s - alpha[j]*p[j]
+            r3 = r.copy()
+            s3 = s.copy()
             w[j] = np.dot(r, s)
-            # print(w[j])
-            beta[j] = m.sqrt(w[j])
-            gamma[j] = w[j]/beta[j]
-            V1[j+1] = r/beta[j]
-            V2[j+1] = s/gamma[j]
-            # REORTHOGONALIZATION:
-            # self.bireorthogonalize(V1, V2, j, use_cuda=use_cuda)
-            # print("ASDFASDF ", np.linalg.norm(V1[j]), np.linalg.norm(V2[j]))
-            asdf = 0
-            # for i in range(j):
-            #     asdf += np.dot(V1[:5], V1[j].T)
-            # print(asdf)
+            beta[j] = np.sqrt(np.abs(w[j]))
+            gamma[j] = w[j]/beta[j] # beta[j]*np.sign(w[j])
+            q[j+1] = r/beta[j]
+            p[j+1] = s/gamma[j]
+            # print(np.dot(q[j+1], p[:j+1].T))
+            # print(np.dot(p[j+1], q[:j+1].T))
+            print("Hq_j - Hq_j =   ", np.sum(np.abs(H*q[j] - (gamma[j-1]*q[j-1] + alpha[j]*q[j] + beta[j]*q[j+1]))))
+            print("HTp_j - HTp_j =   ", np.sum(np.abs(HT*p[j] - (beta[j-1]*p[j-1] + alpha[j]*p[j] + gamma[j]*p[j+1]))))
+            q_basis[j+1] = q[j+1]
+            p_basis[j+1] = p[j+1]
+            asdf = f"{float(np.linalg.norm(r1)):10.4g} | {float(np.linalg.norm(r2)):10.4g} | {float(np.linalg.norm(r3)):10.4g} | {float(np.linalg.norm(s1)):10.4g} | {float(np.linalg.norm(s2)):10.4g} | {float(np.linalg.norm(s3)):10.4g} | {float(alpha[j]):10.4g} | {float(w[j]):10.4g} | {float(beta[j]):10.4g} | {float(gamma[j]):10.4g} | {float(np.abs(alpha[j] - np.dot(q[j], s2))):10.4g} |"
+            dot_products = np.abs(np.dot(q[j+1], p[:j+1].T))
+            argmax = int(np.argmax(dot_products))
+            valmax = float(np.max(dot_products))
+            if valmax < 1e-12:
+                print(asdf + f"\033[92m\033[1m{j+1:6d} {argmax:6d} {valmax:12.4g}\033[0m")
+            elif valmax < 1e-6:
+                print(asdf + f"\033[33m{j+1:6d} {argmax:6d} {valmax:12.4g}\033[0m")
+            else:
+                print(asdf + f"\033[31m{j+1:6d} {argmax:6d} {valmax:12.4g}\033[0m")
+            self.bireorthogonalize(q, p, q_basis, p_basis, j+1, use_cuda=use_cuda)
 
-            r = H*V1[j+1]
-            s = HT*V2[j+1]
-            r = r - V1[j]*gamma[j]
-            s = s - V2[j]*beta[j]
-        alpha[n-1] = np.dot(V1[n-1], r)
+        alpha[n-1] = np.dot(q[n-1], r)
 
         # Creating H_eff
         H_eff = np.zeros((n, n))
@@ -167,15 +173,16 @@ class IrrLanczos:
             H_eff[i,i] = alpha[i]
             H_eff[i,i+1] = gamma[i-1]
 
+        print(alpha, beta, gamma)
+
         if use_cuda:
             # If having used cuda, convert H_eff and V to numpy objects, and H to scipy.sparse.
             import numpy as np
             self._H_eff = cp.asnumpy(H_eff)
-            self._V1 = cp.asnumpy(V1.T)
-            self._V2 = cp.asnumpy(V2.T)
+            self._V = cp.asnumpy(q.T)
             self.H = H.get()
         else:
-            self._H_eff, self._V1, self.V2 = H_eff, V1.T, V2.T
+            self._H_eff, self._V = H_eff, q.T
         print("+++ Lanczos executed successfully.")
         self.Lanczos_has_been_executed = True
 
@@ -280,24 +287,20 @@ class IrrLanczos:
             raise ValueError("Lanczos Algorithm has not been called.")
 
         print("+++ Converting eigenvectors from H_eff to H basis.")
-        M, n, V1, V2 = self.M, self.n, self.V1, self.V2
+        M, n, V = self.M, self.n, self.V
         H_eff_eigvals, H_eff_eigvecs = np.linalg.eigh(self.H_eff)
         
         # Transforming H_eff eigvecs to H eigvecs:
-        H_eigvecs_lanczos1 = np.zeros((M, n))
-        H_eigvecs_lanczos2 = np.zeros((M, n))
+        H_eigvecs_lanczos = np.zeros((M, n))
         for i in range(n):
-            H_eigvecs_lanczos1[:,i] = np.dot(V1, H_eff_eigvecs[:,i])
-            H_eigvecs_lanczos2[:,i] = np.dot(V2, H_eff_eigvecs[:,i])
-        self.test_is_normalized(H_eigvecs_lanczos1, tol=0.001)
-        self.test_is_normalized(H_eigvecs_lanczos2, tol=0.001)
-        self.test_is_orthogonal(H_eigvecs_lanczos1, tol=0.01)
-        self.test_is_orthogonal(H_eigvecs_lanczos2, tol=0.01)
+            H_eigvecs_lanczos[:,i] = np.dot(V, H_eff_eigvecs[:,i])
+        # self.test_is_orthogonal(V)
+        # self.test_is_normalized(H_eigvecs_lanczos, tol=0.001)
+        # self.test_is_orthogonal(H_eigvecs_lanczos, tol=0.01)
         
         
         self._H_eigvals = H_eff_eigvals
-        self._H_eigvecs1 = H_eigvecs_lanczos1
-        self._H_eigvecs2 = H_eigvecs_lanczos2
+        self._H_eigvecs = H_eigvecs_lanczos
         print("+++ Finished Converting.")
         self.H_eigs_have_been_found = True
 
@@ -327,7 +330,7 @@ class IrrLanczos:
 
     def print_good_eigs(self, tol=0.01, print_nr=20, print_bad=True, normal_eq=False):
         """ Prints out found H-eigs that actually match well, requiring Hx = hx => (Hx)/|Hx| = x within a tolerance."""
-        H, eigvecs1, eigvecs2, eigvals = self.H, self.H_eigvecs1, self.H_eigvecs2, self.H_eigvals
+        H, eigvecs, eigvals = self.H, self.H_eigvecs, self.H_eigvals
         inner_prod = np.zeros(self.n)
         for i in range(self.n):
             eigvec = eigvecs[:,i]
@@ -339,13 +342,15 @@ class IrrLanczos:
         if normal_eq:
             eigvals = np.sqrt(eigvals)
 
+        sort_idxs = np.argsort(np.abs(eigvals))
+
         print("__________EIGENVALUE AND EIGVENVECTOR COMPARISON__________")
         print("%12s %12s" % ("Eigval", "Eigvec InnerProd"))
         for i in range(print_nr):
             if abs(1 - inner_prod[i]) < tol:
-                print(f"\033[92m\033[1m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} \033[0m")
+                print(f"\033[92m\033[1m{eigvals[sort_idx[i]]:12.4f}{inner_prod[sort_idxs[i]]:12.6f} \033[0m")
             else:
-                print(f"\033[33m{eigvals[i]:12.4f}{inner_prod[i]:12.6f} --- BAD\033[0m")
+                print(f"\033[33m{eigvals[sort_idxs[i]]:12.4f}{inner_prod[sort_idxs[i]]:12.6f} --- BAD\033[0m")
 
 
 
@@ -382,26 +387,63 @@ class IrrLanczos:
 
 
     @staticmethod
-    def bireorthogonalize(V1, V2, j, use_cuda=True):
+    def bireorthogonalize(V1, V2, q_basis, p_basis, j, use_cuda=True, mem_safe=False):
         if use_cuda:
-            if j != 0:
-                inner_prods_uv = cp.sum(V1[j,:]*V1[:j,:], axis=1)
-                inner_prods_uu = cp.sum(V1[:j,:]*V1[:j,:],axis=1)
-                V1[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V1[:j,:],axis=0)
-
-                inner_prods_uv = cp.sum(V1[j,:]*V2[:j,:], axis=1)
-                inner_prods_uu = cp.sum(V2[:j,:]*V2[:j,:],axis=1)
-                V1[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V2[:j,:],axis=0)
-
-                inner_prods_uv = cp.sum(V2[j,:]*V2[:j,:], axis=1)
-                inner_prods_uu = cp.sum(V2[:j,:]*V2[:j,:],axis=1)
-                V2[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V2[:j,:],axis=0)
-
-                inner_prods_uv = cp.sum(V2[j,:]*V1[:j,:], axis=1)
-                inner_prods_uu = cp.sum(V1[:j,:]*V1[:j,:],axis=1)
-                V2[j,:] -= cp.sum((inner_prods_uv/inner_prods_uu)[:,np.newaxis]*V1[:j,:],axis=0)
+            import cupy as np
+            import numpy as npp
         else:
-            raise NotImplementedError("sorry :)")
+            import numpy as np
+            import numpy as npp
+
+        if mem_safe:
+            uv = np.sum(V1[j]*V2, axis=1)
+            uu = np.sum(V2*V2, axis=1)
+            uu[j:] = 1
+            uv[j] = 0
+            V1[j] = V1[j] - np.sum((uv/uu)[:,None]*V2, axis=0)
+
+            uv = np.sum(V2[j]*V1, axis=1)
+            uu = np.sum(V1*V1, axis=1)
+            uu[j:] = 1
+            uv[j] = 0
+            V2[j] = V2[j] - np.sum((uv/uu)[:,None]*V1, axis=0)
+
+        else:
+            for i in range(j):
+                uv = np.dot(V1[j], p_basis[i])
+                uu = np.dot(p_basis[i], p_basis[i])
+                V1[j] = V1[j] - uv/uu*p_basis[i]
+
+                uv = np.dot(V2[j], q_basis[i])
+                uu = np.dot(q_basis[i], q_basis[i])
+                V2[j] = V2[j] - uv/uu*q_basis[i]
+
+            sqrtdot = np.sqrt(np.abs(np.dot(V1[j], V2[j])))
+            V1[j] = V1[j]/sqrtdot
+            V2[j] = V2[j]/sqrtdot*np.sign(np.dot(V1[j], V2[j]))
+            print("V1*V2", np.dot(V1[j], V2[j]))
+
+            q_basis[j] = V1[j]/np.linalg.norm(V1[j])
+            p_basis[j] = V2[j]/np.linalg.norm(V2[j])
+
+            print("p_basis*p_basis, q_basis*q_basis", np.dot(q_basis[j], q_basis[j]), np.dot(p_basis[j], p_basis[j]))
+            for i in range(j):
+                uv = np.dot(q_basis[j], q_basis[i])
+                uu = np.dot(q_basis[i], q_basis[i])
+                q_basis[j] = q_basis[j] - uv/uu*q_basis[i]
+
+                uv = np.dot(p_basis[j], p_basis[i])
+                uu = np.dot(p_basis[i], p_basis[i])
+                p_basis[j] = p_basis[j] - uv/uu*p_basis[i]
+
+
+            q_basis[j] = q_basis[j]/np.linalg.norm(q_basis[j])
+            p_basis[j] = p_basis[j]/np.linalg.norm(p_basis[j])
+
+            print("max p_basis*q_basis", np.max(np.abs(np.dot(p_basis[j], p_basis[:j].T))))
+
+
+
 
     @staticmethod
     def reorthogonalize(V, j, use_cuda=True):
@@ -485,9 +527,11 @@ class IrrLanczos:
                                 return the largest inner product between two vectors.
         """
         M = np.shape(V)[1]
-        test_matrix = np.abs(np.matrix(V).T * np.matrix(V) - np.eye(M))
+        test_matrix = np.abs(np.matrix(V).T * np.matrix(V) - np.eye(M)*np.linalg.norm(V, axis=0)**2)
         max_error_idx = np.unravel_index(np.argmax(test_matrix, axis=None), test_matrix.shape)
-        max_error = test_matrix[max_error_idx]
+        max_error = np.sqrt(test_matrix[max_error_idx])
+        print("HELLO")
+        print(np.max(test_matrix))
         if no_assert:
             return max_error
         else:
@@ -524,7 +568,7 @@ if __name__ == "__main__":
     H = np.random.random_integers(-50, 50, size=(N, N))
     H = (H+ H.T)/2
 
-    TEST = Lanczos(H)
+    TEST = IrrLanczos(H)
     TEST.execute_Lanczos(n)
     TEST.get_H_eigs()
 
