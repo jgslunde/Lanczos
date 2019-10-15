@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from tools2 import unravel, ravel, get_combinations, get_displaced_index
 from Stencils import Stencils
 
@@ -11,7 +12,7 @@ class Lattice:
             self.start_idx_global = start_idx_global  # Global index of first point in box.
             self.a_local = a_local  # Local spacing in box, in units of finegrid spacing.
             self.N_fine = N_fine  # Number of finegrid points in each dim.
-            self.N_local = N_fine//a_local  # Number of local gridpoints in each dim.
+            self.N_local = math.ceil(N_fine/a_local)  # Number of local gridpoints in each dim.
             self.nr_points = self.N_local**nr_dims  # Total number of lattice points (on local grid).
             self.corner_coord = corner_coord  # Coordinate of box corner, where point with idx 0 is located, in units of finegrid spacing s.
             self.local_point_idxs = np.arange(0, self.N_local**nr_dims, dtype=int)  # Local indexes of points. Idx 0 is at corner_coord, and corresponds to global idx_start.
@@ -28,7 +29,7 @@ class Lattice:
 
         def test_constraints(self):
             # Tests some chosen constrains for legal box spacing.
-            assert self.N_fine%self.a_local == 0, f"Number of finegrid points, {self.N_fine}, must be multiple of local spacing, {self.a_local}."
+            #assert self.N_fine%self.a_local == 0, f"Number of finegrid points, {self.N_fine}, must be multiple of local spacing, {self.a_local}."
             assert ((self.a_local & (self.a_local - 1)) == 0) and self.a_local > 0, f"Local spacing, {self.a}, must be power of 2, and positive."
 
 
@@ -86,14 +87,14 @@ class Lattice:
         """Setting up the boxes and relations between them. """
         # Checking some conditions.
         assert box_depth%2 != 0, f"Currently only accepting odd number of boxes."
-        assert self.N%box_depth == 0, f"Number of boxes in each dim, {box_depth}, must be multiple of number of finegrid points, {self.N}."
-        assert (self.N//box_depth)%2 == 0, f"Number of points per box, {self.N//box_depth}, must be even."
+        #assert self.N%box_depth == 0, f"Number of boxes in each dim, {box_depth}, must be multiple of number of finegrid points, {self.N}."
+        #assert (self.N//box_depth)%2 == 0, f"Number of points per box, {self.N//box_depth}, must be even."
 
         # Calculating some quantities.
         self.N_per_box = self.N//box_depth
         self.nr_boxes = box_depth**self.nr_dims
         self.a_list = np.array(self.calculate_grid_spacings())
-        self.nr_points = np.sum((self.N_per_box//self.a_list)**self.nr_dims, dtype=int)
+        self.nr_points = np.sum(np.ceil(self.N_per_box/self.a_list)**self.nr_dims, dtype=int)
         self.box_corners = get_combinations(0, box_depth-1, self.nr_dims)*self.N//box_depth
         self.coords = np.zeros((self.nr_points, self.nr_dims), dtype=int)
 
@@ -103,6 +104,7 @@ class Lattice:
         for i in range(box_depth**self.nr_dims):
             box = self.Box(i, current_nr_points, self.a_list[i], self.N_per_box, self.box_corners[i], self.nr_dims)
             self.Box_list.append(box)
+            print(box.nr_points, box.coords_global.shape)
             self.coords[current_nr_points : current_nr_points + box.nr_points] = box.coords_global
             self.get_box_nr_from_idx[current_nr_points : current_nr_points + box.nr_points] = i
             current_nr_points += box.nr_points
